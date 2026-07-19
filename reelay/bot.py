@@ -317,16 +317,22 @@ def main():
     # an unanswered onboarding reminder-threshold question pending.
     reminder_reply_catcher = MessageHandler(filters.TEXT & ~filters.COMMAND, onboarding.catchReminderThresholdReply)
 
+    # Bare-word (no-slash) entrypoint matches are a private-chat convenience
+    # only -- in a group, ordinary conversation can accidentally contain
+    # these keywords (e.g. someone just saying "delete" or "auth"), which
+    # would otherwise fire the handler on every member's behalf and, for
+    # /auth specifically, publicly broadcast a "wrong password" reply. The
+    # explicit /command form is unambiguous and stays enabled everywhere.
     auth_handler_command = CommandHandler(config["entrypointAuth"], authentication)
     auth_handler_text = MessageHandler(
-                            filters.Regex(
+                            filters.ChatType.PRIVATE & filters.Regex(
                                 re.compile(r"^" + config["entrypointAuth"] + "$", re.IGNORECASE)
                             ),
                             authentication,
                         )
     allSeries_handler_command = CommandHandler(config["entrypointAllSeries"], listing.allSeries)
     allSeries_handler_text = MessageHandler(
-                            filters.Regex(
+                            filters.ChatType.PRIVATE & filters.Regex(
                                 re.compile(r"^" + config["entrypointAllSeries"] + "$", re.IGNORECASE)
                             ),
                             listing.allSeries,
@@ -334,7 +340,7 @@ def main():
 
     allMovies_handler_command = CommandHandler(config["entrypointAllMovies"], listing.allMovies)
     allMovies_handler_text = MessageHandler(
-        filters.Regex(
+        filters.ChatType.PRIVATE & filters.Regex(
             re.compile(r"^" + config["entrypointAllMovies"] + "$", re.IGNORECASE)
         ),
         listing.allMovies,
@@ -344,7 +350,7 @@ def main():
         entry_points=[
             CommandHandler(config["entrypointDelete"], delete.delete),
             MessageHandler(
-                filters.Regex(
+                filters.ChatType.PRIVATE & filters.Regex(
                     re.compile(r'^' + config["entrypointDelete"] + '$', re.IGNORECASE)
                 ),
                 delete.delete,
@@ -385,7 +391,7 @@ def main():
             CommandHandler(i18n.t("reelay.Movie"), startSerieMovie),
             CommandHandler(i18n.t("reelay.Series"), startSerieMovie),
             MessageHandler(
-                filters.Regex(
+                filters.ChatType.PRIVATE & filters.Regex(
                     re.compile(r'^' + config["entrypointAdd"] + '$', re.IGNORECASE)
                 ),
                 startSerieMovie,
@@ -449,9 +455,9 @@ def main():
             entry_points=[
                 CommandHandler(config["entrypointTransmission"], transmission.transmission),
                 MessageHandler(
-                    filters.Regex(
+                    filters.ChatType.PRIVATE & filters.Regex(
                         re.compile(
-                            r"" + config["entrypointTransmission"] + "", re.IGNORECASE
+                            r"^" + config["entrypointTransmission"] + "$", re.IGNORECASE
                         )
                     ),
                     transmission.transmission,
@@ -475,9 +481,9 @@ def main():
             entry_points=[
                 CommandHandler(config["entrypointSabnzbd"], sabnzbd.sabnzbd),
                 MessageHandler(
-                    filters.Regex(
+                    filters.ChatType.PRIVATE & filters.Regex(
                         re.compile(
-                            r"" + config["entrypointSabnzbd"] + "", re.IGNORECASE
+                            r"^" + config["entrypointSabnzbd"] + "$", re.IGNORECASE
                         )
                     ),
                     sabnzbd.sabnzbd,
