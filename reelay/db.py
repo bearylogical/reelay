@@ -63,6 +63,7 @@ def initDb():
                 status                      TEXT NOT NULL DEFAULT 'pending'
                                                 CHECK (status IN ('pending', 'approved', 'denied', 'banned')),
                 reminder_threshold_days     INTEGER,
+                anonymize_requests          INTEGER,
                 requested_at                TEXT NOT NULL,
                 approved_at                 TEXT,
                 approved_by                 TEXT,
@@ -159,6 +160,13 @@ def initDb():
         # idempotent on databases created by an earlier build.
         try:
             conn.execute("ALTER TABLE seerr_links ADD COLUMN seerr_email TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # anonymize_requests added after the fact -- NULL on pre-existing rows
+        # means "not asked yet", so existing (legacy) members get prompted by
+        # onboarding.sendAnonymizeBackfill() the same as it would a fresh row.
+        try:
+            conn.execute("ALTER TABLE memberships ADD COLUMN anonymize_requests INTEGER")
         except sqlite3.OperationalError:
             pass
         # weekly_digest_* added after the fact -- idempotent for databases
@@ -484,6 +492,39 @@ def getMembershipsAwaitingReminderAnswer(user_id):
             "SELECT * FROM memberships WHERE user_id = ? AND status = 'approved'"
             " AND reminder_threshold_days IS NULL",
             (str(user_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def setAnonymizeRequests(scope_chat_id, user_id, anonymize):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE memberships SET anonymize_requests = ? WHERE scope_chat_id = ? AND user_id = ?",
+            (1 if anonymize else 0, str(scope_chat_id), str(user_id)),
+        )
+
+
+def getMembershipsAwaitingAnonymizeAnswer(user_id):
+    """Approved memberships for this user that haven't answered the
+    onboarding anonymize-requests question yet. Mirrors
+    getMembershipsAwaitingReminderAnswer."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM memberships WHERE user_id = ? AND status = 'approved'"
+            " AND anonymize_requests IS NULL",
+            (str(user_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def getApprovedMembersAwaitingAnonymizeAnswer():
+    """All approved memberships (any user, any scope) that haven't answered
+    the anonymize-requests question -- covers members who joined before this
+    preference existed, so a startup backfill can give them the same choice
+    new members are asked at onboarding."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM memberships WHERE status = 'approved' AND anonymize_requests IS NULL"
         ).fetchall()
         return [dict(r) for r in rows]
 

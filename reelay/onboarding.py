@@ -45,6 +45,7 @@ async def join(update, context):
             i18n.t("reelay.Onboarding.JoinApproved", title=scope.get("title") or scope["chat_id"])
         )
         await askReminderThreshold(update, context)
+        await askAnonymize(update, context)
         # No admin in the loop on an auto-join, so let the user self-select
         # which Overseerr/Plex account is theirs.
         await sendSeerrPicker(
@@ -104,6 +105,7 @@ async def handleApproval(update, context):
         except Exception:
             pass
         await askReminderThresholdFor(context, target_user_id)
+        await askAnonymizeFor(context, target_user_id)
         # Ask the approving admin to map this member to their Overseerr/Plex
         # account, so request attribution and watch tracking work for them.
         await sendSeerrPicker(context, update.effective_user.id, scope_chat_id, target_user_id, display_name)
@@ -389,3 +391,84 @@ async def remindme(update, context):
         await update.message.reply_text(i18n.t("reelay.Onboarding.ReminderDisabled"))
     else:
         await update.message.reply_text(i18n.t("reelay.Onboarding.ReminderSet", days=days))
+
+
+# --- Anonymize-requests preference -------------------------------------------
+
+async def askAnonymize(update, context):
+    await askAnonymizeFor(context, update.effective_user.id)
+
+
+async def askAnonymizeFor(context, telegram_user_id):
+    await _sendAnonymizePicker(context.bot, telegram_user_id, i18n.t("reelay.Onboarding.AskAnonymize"))
+
+
+async def _sendAnonymizePicker(bot, telegram_user_id, prompt):
+    keyboard = [[
+        InlineKeyboardButton(i18n.t("reelay.Onboarding.AnonShowName"), callback_data="anon_no"),
+        InlineKeyboardButton(i18n.t("reelay.Onboarding.AnonKeepPrivate"), callback_data="anon_yes"),
+    ]]
+    try:
+        await bot.send_message(
+            chat_id=telegram_user_id,
+            text=prompt,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+    except Exception:
+        logger.warning(f"Could not DM {telegram_user_id} the onboarding anonymize question.")
+
+
+async def handleAnonymizeChoice(update, context):
+    """Callback for the anon_yes/anon_no picker. Not scope-specific in its
+    callback_data -- like the reminder-threshold reply, it applies to
+    whichever of this user's memberships are still awaiting an answer."""
+    query = update.callback_query
+    hide_name = query.data == "anon_yes"
+    pending = db.getMembershipsAwaitingAnonymizeAnswer(query.from_user.id)
+    for m in pending:
+        db.setAnonymizeRequests(m["scope_chat_id"], query.from_user.id, hide_name)
+
+    await query.answer()
+    if hide_name:
+        await query.edit_message_text(i18n.t("reelay.Onboarding.AnonSetHidden"))
+    else:
+        await query.edit_message_text(i18n.t("reelay.Onboarding.AnonSetShown"))
+
+
+async def sendAnonymizeBackfill(bot):
+    """DM the anonymize-requests picker to approved members who joined before
+    this preference existed. Safe to call on every startup -- once a
+    membership is answered it stops matching
+    getApprovedMembersAwaitingAnonymizeAnswer, so no repeat DMs."""
+    pending = db.getApprovedMembersAwaitingAnonymizeAnswer()
+    seen = set()
+    for m in pending:
+        if m["user_id"] in seen:
+            continue
+        seen.add(m["user_id"])
+        await _sendAnonymizePicker(bot, m["user_id"], i18n.t("reelay.Onboarding.AskAnonymizeLegacy"))
+
+
+async def anonymize(update, context):
+    """/anonymize on|off - change the request-attribution preference at any time."""
+    if update.effective_chat.type != "private":
+        await update.message.reply_text(i18n.t("reelay.Onboarding.JoinDmOnly"))
+        return
+
+    memberships = db.getApprovedMemberships(update.effective_user.id)
+    if not memberships:
+        await update.message.reply_text(i18n.t("reelay.Onboarding.NoMembership"))
+        return
+
+    if not context.args or context.args[0].lower() not in ("on", "off"):
+        await update.message.reply_text(i18n.t("reelay.Onboarding.AnonymizeUsage"))
+        return
+
+    hide_name = context.args[0].lower() == "on"
+    for m in memberships:
+        db.setAnonymizeRequests(m["scope_chat_id"], update.effective_user.id, hide_name)
+
+    if hide_name:
+        await update.message.reply_text(i18n.t("reelay.Onboarding.AnonSetHidden"))
+    else:
+        await update.message.reply_text(i18n.t("reelay.Onboarding.AnonSetShown"))
