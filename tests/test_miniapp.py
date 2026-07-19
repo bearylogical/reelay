@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import time
 import urllib.parse
 from unittest.mock import AsyncMock, patch
 
@@ -171,3 +172,56 @@ def test_request_not_linked_returns_409():
         d = await r.json()
         assert r.status == 409 and d["error"] == "not_linked"
     run_client(check)
+
+
+def test_plex_link_flow():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "9", "z", status="approved")
+    db.approveMembership("-100111", "9", approved_by="x")
+    miniapp._pending_pins.clear()
+
+    async def check(c):
+        with patch("reelay.miniapp.plex.createPin", return_value={"id": 111, "code": "XYZ"}), \
+             patch("reelay.miniapp.plex.authUrl", return_value="https://plex.tv/auth"):
+            r = await c.post("/api/plex/start", headers={"X-Telegram-Init-Data": init_for(9, "z")})
+            d = await r.json()
+            assert r.status == 200 and d["pinId"] == 111 and d["authUrl"] == "https://plex.tv/auth"
+
+        with patch("reelay.miniapp.plex.pollPin", return_value=None):
+            r = await c.get("/api/plex/poll?pinId=111", headers={"X-Telegram-Init-Data": init_for(9, "z")})
+            d = await r.json()
+            assert d["status"] == "pending"
+
+        with patch("reelay.miniapp.plex.pollPin", return_value="plextoken"), \
+             patch("reelay.miniapp.overseerr.signInWithPlex",
+                   return_value=({"id": 77, "displayName": "zed", "email": "z@x.com"}, "cookie123")):
+            r = await c.get("/api/plex/poll?pinId=111", headers={"X-Telegram-Init-Data": init_for(9, "z")})
+            d = await r.json()
+            assert r.status == 200 and d["status"] == "linked" and d["displayName"] == "zed"
+
+        link = db.getSeerrLink("-100111", "9")
+        assert link["seerr_user_id"] == 77 and link["mode"] == "normal" and link["session_cookie"] == "cookie123"
+
+        # pin was consumed -> polling again reports expired
+        r = await c.get("/api/plex/poll?pinId=111", headers={"X-Telegram-Init-Data": init_for(9, "z")})
+        d = await r.json()
+        assert d["status"] == "expired"
+    run_client(check)
+
+
+def test_plex_poll_rejects_other_users_pin():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "9", "z", status="approved")
+    db.approveMembership("-100111", "9", approved_by="x")
+    db.upsertMembership("-100111", "10", "y", status="approved")
+    db.approveMembership("-100111", "10", approved_by="x")
+    miniapp._pending_pins.clear()
+    miniapp._pending_pins[222] = {"user_id": "9", "scope_chat_id": "-100111", "created_at": time.time()}
+
+    async def check(c):
+        r = await c.get("/api/plex/poll?pinId=222", headers={"X-Telegram-Init-Data": init_for(10, "y")})
+        d = await r.json()
+        assert d["status"] == "expired"
+    run_client(check)
+
+

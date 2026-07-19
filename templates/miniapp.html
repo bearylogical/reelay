@@ -62,6 +62,17 @@
   .role-select { background: var(--bg); color: var(--text); border: 1px solid rgba(128,128,128,.3);
     border-radius: 6px; padding: 4px 6px; font-size: 12px; }
   .invite-code { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  .section-title { font-size: 12px; color: var(--hint); text-transform: uppercase;
+    letter-spacing: .04em; margin: 16px 4px 6px; }
+  .section-title:first-child { margin-top: 4px; }
+  .btn { background: var(--btn); color: var(--btn-text); border: none; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn.secondary { background: rgba(128,128,128,.25); color: var(--text); }
+  .btn:disabled { opacity: .5; }
+  .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(128,128,128,.3);
+    border-top-color: var(--btn); display: inline-block; vertical-align: -3px; margin-right: 6px;
+    animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -108,11 +119,16 @@
     <div id="results"></div>
   </div>
 
+  <div class="panel" id="p-account">
+    <div id="account"></div>
+  </div>
+
   <nav class="tabs">
     <button data-tab="requests" class="active"><span class="ico">📥</span>Requests</button>
     <button data-tab="queue" id="tab-queue" style="display:none"><span class="ico">⬇️</span>Queue</button>
     <button data-tab="members" id="tab-members" style="display:none"><span class="ico">⚙️</span>Members</button>
     <button data-tab="browse"><span class="ico">🔍</span>Browse</button>
+    <button data-tab="account"><span class="ico">👤</span>Account</button>
   </nav>
 
   <div class="toast" id="toast"></div>
@@ -311,6 +327,89 @@ async function request(item, btn) {
   } catch (e) { btn.disabled = false; btn.textContent = "Request"; toast("Couldn't request"); }
 }
 
+// --- Account / Plex linking -----------------------------------------------
+
+function renderAccount(data) {
+  const box = el("account");
+  if (data.linked) {
+    box.innerHTML = `
+      <div class="section-title">Your account</div>
+      <div class="card"><div class="body">
+        <div class="t">✅ Linked to Plex</div>
+        <div class="m">${H(data.seerrUsername || "")}</div>
+      </div></div>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="section-title">Your account</div>
+    <div class="card"><div class="body">
+      <div class="t">Not linked</div>
+      <div class="m">Connect your Plex account so requests and reminders are attributed to you.</div>
+    </div></div>
+    <div style="margin:10px 4px">
+      <button class="btn" id="plex-connect">Connect Plex</button>
+      <div id="plex-status" class="m" style="margin-top:8px"></div>
+      <button class="btn secondary" id="plex-recheck" style="display:none;margin-top:8px">I've approved — check now</button>
+    </div>`;
+  el("plex-connect").addEventListener("click", startPlexLink);
+  el("plex-recheck").addEventListener("click", () => pollPlexLink(true));
+}
+
+let plexPollTimer = null, plexPollTries = 0, plexPinId = null;
+
+async function startPlexLink() {
+  const btn = el("plex-connect"), status = el("plex-status"), recheck = el("plex-recheck");
+  btn.disabled = true;
+  try {
+    const res = await api("/api/plex/start", { method: "POST" });
+    plexPinId = res.pinId;
+    tg.openLink(res.authUrl);
+    btn.style.display = "none";
+    recheck.style.display = "";
+    status.innerHTML = `<span class="spinner"></span>Waiting for you to approve in the browser…`;
+    plexPollTries = 0;
+    schedulePlexPoll();
+  } catch (e) {
+    btn.disabled = false;
+    toast("Couldn't start Plex link");
+  }
+}
+
+function schedulePlexPoll() {
+  clearTimeout(plexPollTimer);
+  plexPollTimer = setTimeout(() => pollPlexLink(false), 2500);
+}
+
+async function pollPlexLink(manual) {
+  if (!plexPinId) return;
+  const status = el("plex-status");
+  if (!status) return;
+  plexPollTries++;
+  try {
+    const res = await api(`/api/plex/poll?pinId=${plexPinId}`);
+    if (res.status === "linked") {
+      clearTimeout(plexPollTimer);
+      toast(`Linked as ${res.displayName}!`);
+      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      const data = await api("/api/bootstrap");
+      el("sub").textContent = `${data.displayName} · ${data.role}${data.linked ? "" : " · not linked"}`;
+      renderAccount(data);
+      renderRequests(data);
+      return;
+    }
+    if (res.status === "error" || res.status === "expired") {
+      clearTimeout(plexPollTimer);
+      toast("Couldn't link Plex — try again");
+      renderAccount({ linked: false });
+      return;
+    }
+    if (plexPollTries < 48) schedulePlexPoll();
+  } catch (e) {
+    if (manual) toast("Still waiting…");
+    if (plexPollTries < 48) schedulePlexPoll();
+  }
+}
+
 // Tabs
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
   const tab = b.dataset.tab;
@@ -336,6 +435,7 @@ el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer
     if (data.canSeeQueue) el("tab-queue").style.display = "";
     if (data.role === "admin") el("tab-members").style.display = "";
     renderRequests(data);
+    renderAccount(data);
   } catch (e) {
     document.body.innerHTML = `<div class="empty">Couldn't load. ${H(String(e.message || e))}</div>`;
   }

@@ -101,3 +101,5 @@ def test_reminder_threshold_awaiting():
     assert len(db.getMembershipsAwaitingReminderAnswer("5")) == 1
     db.setReminderThreshold("-100111", "5", 3)
     assert db.getMembershipsAwaitingReminderAnswer("5") == []
+
+

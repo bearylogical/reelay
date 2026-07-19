@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json as jsonlib
 import logging
+import time
 import types
 import urllib.parse
 
@@ -20,6 +21,7 @@ from . import channels
 from . import db
 from . import logger
 from . import overseerr
+from . import plex
 from . import radarr
 from . import sonarr
 from . import webhooks
@@ -31,6 +33,11 @@ logLevel = logging.DEBUG if config.get("debugLogging", False) else logging.INFO
 logger = logger.getLogger("reelay.miniapp", logLevel, config.get("logToConsole", False))
 
 DASHBOARD_REQUEST_LIMIT = 20  # bound title-resolution latency on load
+
+# Plex PIN flow: pin_id -> {user_id, scope_chat_id, created_at}. Single aiohttp
+# process, so an in-memory dict is enough -- pins live minutes, not restarts.
+_pending_pins = {}
+PLEX_PIN_TTL = 600
 
 
 def enabled():
@@ -122,6 +129,7 @@ async def bootstrap(request):
         "displayName": tg_user.get("username") or tg_user.get("first_name") or user_id,
         "scopeTitle": scope.get("title") or scope["chat_id"],
         "linked": bool(link),
+        "seerrUsername": link["seerr_username"] if link else None,
         "overseerrEnabled": overseerr.enabled(),
         "canSeeQueue": role in ("editor", "admin"),
         "counts": counts,
@@ -182,6 +190,58 @@ async def submit_request(request):
     )
     return web.json_response({"ok": True})
 
+
+# --- Plex self-service linking -------------------------------------------------
+
+def _pruneExpiredPins():
+    cutoff = time.time() - PLEX_PIN_TTL
+    for pin_id in [k for k, v in _pending_pins.items() if v["created_at"] < cutoff]:
+        _pending_pins.pop(pin_id, None)
+
+
+async def plex_start(request):
+    user_id, scope, membership, tg_user = _authed(request)
+    if not overseerr.enabled():
+        return web.json_response({"ok": False, "error": "overseerr_disabled"}, status=400)
+    pin = plex.createPin()
+    if not pin:
+        return web.json_response({"ok": False, "error": "plex_unavailable"}, status=502)
+    _pruneExpiredPins()
+    _pending_pins[pin["id"]] = {"user_id": user_id, "scope_chat_id": scope["chat_id"], "created_at": time.time()}
+    return web.json_response({"authUrl": plex.authUrl(pin["code"]), "pinId": pin["id"]})
+
+
+async def plex_poll(request):
+    user_id, scope, membership, tg_user = _authed(request)
+    _pruneExpiredPins()
+    try:
+        pin_id = int(request.query.get("pinId", ""))
+    except ValueError:
+        return web.json_response({"status": "expired"})
+
+    pending = _pending_pins.get(pin_id)
+    if not pending or pending["user_id"] != user_id or pending["scope_chat_id"] != scope["chat_id"]:
+        return web.json_response({"status": "expired"})
+
+    token = plex.pollPin(pin_id)
+    if not token:
+        return web.json_response({"status": "pending"})
+
+    seerr_user, cookie = overseerr.signInWithPlex(token)
+    if not seerr_user:
+        return web.json_response({"status": "error", "error": "overseerr_rejected"})
+
+    name = overseerr.displayName(seerr_user)
+    db.linkSeerr(
+        scope["chat_id"], user_id, int(seerr_user["id"]),
+        seerr_username=name, seerr_email=seerr_user.get("email"),
+        mode="normal", session_cookie=cookie,
+    )
+    _pending_pins.pop(pin_id, None)
+    return web.json_response({"status": "linked", "displayName": name})
+
+
+# --- Admin: member management --------------------------------------------------
 
 def _require_admin(membership):
     if membership["role"] != "admin":
@@ -307,6 +367,8 @@ def build_app(bot):
     app.router.add_get("/api/queue", queue)
     app.router.add_get("/api/catalog", catalog)
     app.router.add_post("/api/request", submit_request)
+    app.router.add_post("/api/plex/start", plex_start)
+    app.router.add_get("/api/plex/poll", plex_poll)
     app.router.add_get("/api/members", members)
     app.router.add_post("/api/members/{user_id}/approve", approve_member)
     app.router.add_post("/api/members/{user_id}/deny", deny_member)
