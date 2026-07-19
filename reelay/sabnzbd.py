@@ -2,7 +2,7 @@ import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler
 
-from .commons import authentication, checkAllowed, checkId, generateApiQuery, guardCallbackOwner, stampCallbackOwner
+from .commons import requestChatAccess, checkAllowed, checkId, generateApiQuery, guardCallbackOwner, stampCallbackOwner
 from .config import config
 from .translations import i18n
 import logging
@@ -31,10 +31,8 @@ async def sabnzbd(update, context):
         return ConversationHandler.END
 
     if not checkId(update):
-        await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Authorize")
-        )
-        return SABNZBD_SPEED_LIMIT_100
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
 
     if config["onlyAdmin"] and not checkAllowed(update, "admin"):
         await context.bot.send_message(
@@ -70,10 +68,7 @@ async def changeSpeedSabnzbd(update, context):
         return
 
     if not checkId(update):
-        if (
-                await authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
+        return ConversationHandler.END
 
     choice = update.callback_query.data
 

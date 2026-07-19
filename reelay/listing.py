@@ -2,7 +2,7 @@ from telegram.ext import ConversationHandler
 import logging
 from . import logger
 
-from .commons import authentication, checkAllowed, checkId, format_long_list_message
+from .commons import requestChatAccess, checkAllowed, checkId, format_long_list_message
 from .config import config
 from .translations import i18n
 from . import radarr
@@ -27,10 +27,8 @@ async def allSeries(update, context):
         return ConversationHandler.END
 
     if not checkId(update):
-        if (
-            await authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
     else:
         result = sonarr.allSeries()
         content = format_long_list_message(result)
@@ -64,10 +62,8 @@ async def allMovies(update, context):
         return ConversationHandler.END
     
     if not checkId(update):
-        if (
-            await authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
     else:
         result = radarr.all_movies()
         content = format_long_list_message(result)

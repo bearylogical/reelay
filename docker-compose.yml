@@ -8,7 +8,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./reelay.db:/app/reelay.db:rw       # `touch reelay.db` before first run so this mounts as a file
       - ./logs:/app/logs:rw                  # optional
-      - ./chatid.txt:/app/chatid.txt:rw      # optional: legacy per-chat password auth
+      - ./chatid.txt:/app/chatid.txt:rw      # optional: one-time import of a legacy chatid.txt allowlist on first startup; access after that is approved from the Mini App
 
   # The Mini App and the Overseerr webhook need a public HTTPS URL. This
   # sidecar exposes the bot's port (default 8080) via a Cloudflare tunnel --

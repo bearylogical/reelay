@@ -358,6 +358,42 @@ async def regenerate_invite(request):
     return web.json_response({"inviteCode": updated["invite_code"]})
 
 
+# --- Legacy chat access requests -----------------------------------------------
+#
+# Bot-wide (not per-scope) requests from the old password-gated direct-command
+# surface (see commons.requestChatAccess). Any admin of the caller's resolved
+# scope may review them -- there's no separate "bot owner" identity, and by
+# the time a request exists at least one scope with an approved admin exists
+# (see the plan notes on /claim never needing this gate).
+
+async def chat_requests(request):
+    _, _, membership, _ = _authed(request)
+    _require_admin(membership)
+    rows = db.getPendingChatAccessRequests()
+    return web.json_response([
+        {"chatId": r["chat_id"], "displayName": r["display_name"], "requestedAt": r["requested_at"]}
+        for r in rows
+    ])
+
+
+async def approve_chat_request(request):
+    user_id, _, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["chat_id"]
+    db.approveChatAccess(target, approved_by=user_id)
+    await _notify(request, target, i18n.t("reelay.Chatid added"))
+    return web.json_response({"ok": True})
+
+
+async def deny_chat_request(request):
+    user_id, _, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["chat_id"]
+    db.denyChatAccess(target, denied_by=user_id)
+    await _notify(request, target, i18n.t("reelay.ChatAccess.Denied"))
+    return web.json_response({"ok": True})
+
+
 def build_app(bot):
     app = web.Application()
     app["bot"] = bot
@@ -376,6 +412,9 @@ def build_app(bot):
     app.router.add_delete("/api/members/{user_id}", remove_member)
     app.router.add_patch("/api/scope", update_scope)
     app.router.add_post("/api/invite/regenerate", regenerate_invite)
+    app.router.add_get("/api/chat-requests", chat_requests)
+    app.router.add_post("/api/chat-requests/{chat_id}/approve", approve_chat_request)
+    app.router.add_post("/api/chat-requests/{chat_id}/deny", deny_chat_request)
     # Overseerr status events -> the scope's #updates topic.
     app.router.add_post("/overseerr/webhook/{secret}", webhooks.handle_overseerr)
     return app
