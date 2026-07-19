@@ -127,7 +127,7 @@ def initDb():
                 chat_id         TEXT PRIMARY KEY,
                 display_name    TEXT,
                 status          TEXT NOT NULL DEFAULT 'pending'
-                                    CHECK (status IN ('pending', 'approved', 'denied')),
+                                    CHECK (status IN ('pending', 'approved', 'denied', 'revoked')),
                 requested_at    TEXT NOT NULL,
                 decided_at      TEXT,
                 decided_by      TEXT
@@ -561,7 +561,7 @@ def requestChatAccess(chat_id, display_name=None):
                 (str(chat_id), display_name, _now()),
             )
             return True
-        if row["status"] == "denied":
+        if row["status"] in ("denied", "revoked"):
             conn.execute(
                 "UPDATE chat_access_requests SET display_name = ?, status = 'pending',"
                 " requested_at = ?, decided_at = NULL, decided_by = NULL WHERE chat_id = ?",
@@ -602,6 +602,23 @@ def denyChatAccess(chat_id, denied_by):
             "UPDATE chat_access_requests SET status = 'denied', decided_at = ?, decided_by = ?"
             " WHERE chat_id = ?",
             (_now(), str(denied_by), str(chat_id)),
+        )
+
+
+def getApprovedChatAccessRequests():
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM chat_access_requests WHERE status = 'approved' ORDER BY decided_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def revokeChatAccess(chat_id, revoked_by):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE chat_access_requests SET status = 'revoked', decided_at = ?, decided_by = ?"
+            " WHERE chat_id = ?",
+            (_now(), str(revoked_by), str(chat_id)),
         )
 
 

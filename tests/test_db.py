@@ -132,6 +132,22 @@ def test_chat_access_request_denied_then_reset_to_pending():
     assert [r["chat_id"] for r in db.getPendingChatAccessRequests()] == ["7"]
 
 
+def test_chat_access_revocation():
+    db.requestChatAccess("42", "alice")
+    db.approveChatAccess("42", approved_by="1")
+    assert db.isChatAuthorized("42") is True
+    assert [r["chat_id"] for r in db.getApprovedChatAccessRequests()] == ["42"]
+
+    db.revokeChatAccess("42", revoked_by="1")
+    assert db.isChatAuthorized("42") is False
+    assert db.getApprovedChatAccessRequests() == []
+    assert db.getApprovedChatIds() == []
+
+    # a revoked chat can request access again, same as a denied one
+    assert db.requestChatAccess("42", "alice") is True
+    assert [r["chat_id"] for r in db.getPendingChatAccessRequests()] == ["42"]
+
+
 def test_legacy_chatid_migration(tmp_path, monkeypatch):
     chatidFile = tmp_path / "chatid.txt"
     chatidFile.write_text("111 - alice\n222\n")

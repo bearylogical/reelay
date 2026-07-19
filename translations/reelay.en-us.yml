@@ -46,6 +46,7 @@ en-us:
     StillPending: "Still waiting on an admin to approve this chat from the Mini App."
     AdminNotify: "🔐 %{name} (chat %{chat_id}) wants access to Reelay. Review it in the Mini App's Members tab."
     Denied: "This chat's access request was denied."
+    Revoked: "This chat's access to Reelay has been revoked by an admin."
 
   GroupMode:
     Activated: "✅ %{name} is now an Reelay admin for this group. Invite code: %{code}. Members can join from a DM with /join %{code}."
