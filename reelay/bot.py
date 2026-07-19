@@ -201,8 +201,11 @@ async def openApp(update, context):
 
 
 async def onStartup(application):
-    """post_init: launch the Mini App server and set the persistent menu button."""
+    """post_init: launch the Mini App server, set the persistent menu button,
+    and backfill the anonymize-requests onboarding question to legacy members
+    who joined before that preference existed."""
     await miniapp.start_server(application)
+    await onboarding.sendAnonymizeBackfill(application.bot)
     if miniapp.enabled():
         try:
             await application.bot.set_chat_menu_button(
@@ -302,6 +305,7 @@ def main():
 
     join_handler_command = CommandHandler("join", onboarding.join)
     remindme_handler_command = CommandHandler("remindme", onboarding.remindme)
+    anonymize_handler_command = CommandHandler("anonymize", onboarding.anonymize)
     linkme_handler_command = CommandHandler("linkme", onboarding.linkme)
     requestlink_handler_command = CommandHandler("requestlink", onboarding.requestlink)
     app_handler_command = CommandHandler("app", openApp)
@@ -314,6 +318,7 @@ def main():
     join_approval_handler_callback = CallbackQueryHandler(onboarding.handleApproval, pattern=r"^(approve|deny)_join_")
     seerr_link_handler_callback = CallbackQueryHandler(onboarding.handleSeerrLink, pattern=r"^(slink|sskip)_")
     request_link_handler_callback = CallbackQueryHandler(onboarding.handleRequestLink, pattern=r"^reqlink")
+    anonymize_handler_callback = CallbackQueryHandler(onboarding.handleAnonymizeChoice, pattern=r"^anon_(yes|no)$")
     # Low group number so this runs before the add/delete ConversationHandlers'
     # text handlers -- it only acts (and stops propagation) when this user has
     # an unanswered onboarding reminder-threshold question pending.
@@ -513,6 +518,7 @@ def main():
     application.add_handler(switch_handler_callback)
     application.add_handler(join_handler_command)
     application.add_handler(remindme_handler_command)
+    application.add_handler(anonymize_handler_command)
     application.add_handler(linkme_handler_command)
     application.add_handler(requestlink_handler_command)
     application.add_handler(app_handler_command)
@@ -522,6 +528,7 @@ def main():
     application.add_handler(join_approval_handler_callback)
     application.add_handler(seerr_link_handler_callback)
     application.add_handler(request_link_handler_callback)
+    application.add_handler(anonymize_handler_callback)
 
     application.add_handler(auth_handler_command)
     application.add_handler(auth_handler_text)
@@ -955,10 +962,15 @@ async def announceRequest(update, context, scope, title):
     if scope is None:
         return
     user = update.effective_user
-    name = user.username or user.first_name or str(user.id)
+    membership = db.getMembership(scope["chat_id"], user.id)
+    if membership and membership.get("anonymize_requests"):
+        text = i18n.t("reelay.Channels.RequestAnnounceAnon", title=title)
+    else:
+        name = user.username or user.first_name or str(user.id)
+        text = i18n.t("reelay.Channels.RequestAnnounce", name=name, title=title)
     await channels.announce(
         context, scope["chat_id"], channels.CATEGORY_REQUESTS,
-        i18n.t("reelay.Channels.RequestAnnounce", name=name, title=title),
+        text,
         from_chat_id=update.effective_chat.id,
         from_thread_id=update.effective_message.message_thread_id,
     )

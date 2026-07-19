@@ -181,12 +181,16 @@ async def submit_request(request):
 
     # Announce into the scope's request channel (from_chat_id=None -> always
     # posts, since a Mini App request has no originating chat/topic).
-    name = tg_user.get("username") or tg_user.get("first_name") or user_id
     title = body.get("title") or f"tmdb {media_id}"
+    if membership.get("anonymize_requests"):
+        text = i18n.t("reelay.Channels.RequestAnnounceAnon", title=title)
+    else:
+        name = tg_user.get("username") or tg_user.get("first_name") or user_id
+        text = i18n.t("reelay.Channels.RequestAnnounce", name=name, title=title)
     shim = types.SimpleNamespace(bot=request.app["bot"])
     await channels.announce(
         shim, scope["chat_id"], channels.CATEGORY_REQUESTS,
-        i18n.t("reelay.Channels.RequestAnnounce", name=name, title=title),
+        text,
     )
     return web.json_response({"ok": True})
 

@@ -92,6 +92,13 @@ en-us:
     RequestLinkSentAll: "🔔 Asked %{count} member(s) to link their Plex account."
     RequestLinkFailed: "Couldn't message %{name} — they may need to start a chat with me first."
     LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account so I can attribute your requests and track what you've watched."
+    AskAnonymize: "Last thing — when you request something, should I show your name in the group's request feed, or keep it anonymous?"
+    AskAnonymizeLegacy: "🔒 New: you can now choose whether your name shows up when you request something in the group. Should I show your name, or keep it anonymous?"
+    AnonShowName: "🙂 Show my name"
+    AnonKeepPrivate: "🙈 Keep me anonymous"
+    AnonSetShown: "Got it, I'll show your name on requests."
+    AnonSetHidden: "Got it, I'll keep your requests anonymous."
+    AnonymizeUsage: "Usage: /anonymize on|off"
 
   messages:
     Add: Yes, add this %{subject}
@@ -144,6 +151,7 @@ en-us:
     RouteRemoved: "Removed routing for %{category}."
     NoSuchRoute: "No routing was set for %{category}."
     RequestAnnounce: "🎬 %{name} requested *%{title}*"
+    RequestAnnounceAnon: "🎬 Someone requested *%{title}*"
 
   Transmission:
     NotEnabled: "The Transmission function is not activated."
