@@ -25,9 +25,9 @@ def generateServerAddr(app):
             path = config[app]["server"]["path"]
             return http + addr + ":" + str(port) + path
         except Exception:
-            logger.warn("No ip or port defined.")
+            logger.warning("No ip or port defined.")
     except Exception as e:
-        logger.warn(f"Generate of serveraddress failed: {e}.")
+        logger.warning(f"Generate of serveraddress failed: {e}.")
 
 
 def cleanUrl(text):
@@ -47,7 +47,7 @@ def generateApiQuery(app, endpoint, parameters={}):
                 url += "&" + key + "=" + value
         return cleanUrl(url)  # Clean URL (validate) and return as string
     except Exception as e:
-        logger.warn(f"Generate of APIQUERY failed: {e}.")
+        logger.warning(f"Generate of APIQUERY failed: {e}.")
 
 
 # Check if this chat is authorized for the legacy direct-command surface

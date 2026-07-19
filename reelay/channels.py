@@ -56,6 +56,7 @@ async def routehere(update, context):
 
     thread_id = update.effective_message.message_thread_id
     db.setChannelRoute(update.effective_chat.id, category, update.effective_chat.id, thread_id)
+    logger.info(f"Scope {update.effective_chat.id}: route '{category}' -> thread {thread_id} set by {update.effective_user.id}")
     where = i18n.t("reelay.Channels.ThisTopic") if thread_id else i18n.t("reelay.Channels.ThisChat")
     await update.message.reply_text(i18n.t("reelay.Channels.RouteSet", category=category, where=where))
 
@@ -93,6 +94,7 @@ async def unroute(update, context):
         return
     category = context.args[0].strip().lower()
     if db.deleteChannelRoute(update.effective_chat.id, category):
+        logger.info(f"Scope {update.effective_chat.id}: route '{category}' cleared by {update.effective_user.id}")
         await update.message.reply_text(i18n.t("reelay.Channels.RouteRemoved", category=category))
     else:
         await update.message.reply_text(i18n.t("reelay.Channels.NoSuchRoute", category=category))

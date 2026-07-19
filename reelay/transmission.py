@@ -78,14 +78,20 @@ async def changeSpeedTransmission(update, context):
         )
     
     message = None
+    action = None
     if choice == TSL_NORMAL:
         command += ' --no-alt-speed'
         message = i18n.t("reelay.Transmission.ChangedToNormal")
+        action = "no-alt-speed"
     elif choice == TSL_LIMIT:
         command += ' --alt-speed'
         message=i18n.t("reelay.Transmission.ChangedToTSL"),
-    
-    os.system(command)
+        action = "alt-speed"
+
+    rc = os.system(command)
+    if rc != 0:
+        # Don't log `command` -- it embeds the plaintext auth password.
+        logger.warning(f"transmission-remote {action} against {config['host']} exited with code {rc}")
 
     await context.bot.send_message(
             chat_id=update.effective_message.chat_id,

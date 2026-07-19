@@ -75,9 +75,15 @@ async def changeSpeedSabnzbd(update, context):
     url = generateApiQuery("sabnzbd", "",
                            {'output': 'json', 'mode': 'config', 'name': 'speedlimit', 'value': choice})
 
-    req = requests.get(url)
+    try:
+        req = requests.get(url)
+        status = req.status_code
+    except Exception as e:
+        logger.warning(f"SABnzbd speedlimit change failed: {e}")
+        status = None
+
     message = None
-    if req.status_code == 200:
+    if status == 200:
         if choice == SABNZBD_SPEED_LIMIT_100:
             message = i18n.t("reelay.Sabnzbd.ChangedTo100")
         elif choice == SABNZBD_SPEED_LIMIT_50:
@@ -86,6 +92,8 @@ async def changeSpeedSabnzbd(update, context):
             message = i18n.t("reelay.Sabnzbd.ChangedTo25")
 
     else:
+        if status is not None:
+            logger.warning(f"SABnzbd speedlimit change failed: status={status}")
         message = i18n.t("reelay.Sabnzbd.Error")
 
     await context.bot.send_message(

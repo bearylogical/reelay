@@ -49,16 +49,19 @@ def _authorized(request):
 async def handle_overseerr(request):
     # Unknown/missing secret looks like a non-existent endpoint on purpose.
     if not _authorized(request):
+        logger.warning("Rejected Overseerr webhook: missing or incorrect secret")
         raise web.HTTPNotFound()
     try:
         payload = await request.json()
     except Exception:
+        logger.warning("Overseerr webhook: invalid JSON payload")
         return web.json_response({"ok": False, "error": "bad_json"}, status=400)
 
     ntype = payload.get("notification_type", "")
 
     # The "Test" button in Overseerr -- confirm wiring by echoing into updates.
     if ntype == "TEST_NOTIFICATION":
+        logger.info("Overseerr webhook: TEST_NOTIFICATION received")
         shim = types.SimpleNamespace(bot=request.app["bot"])
         for scope in db.getActiveScopes():
             await channels.announce(shim, scope["chat_id"], channels.CATEGORY_UPDATES,
@@ -69,10 +72,19 @@ async def handle_overseerr(request):
     if ntype == "MEDIA_AVAILABLE":
         media = payload.get("media") or {}
         req = payload.get("request") or {}
+        title = payload.get("subject") or "Media"
+        media_type = media.get("media_type")
         db.recordMediaEvent(
-            title=payload.get("subject") or "Media",
-            media_type=media.get("media_type"),
+            title=title,
+            media_type=media_type,
             requested_by_username=req.get("requestedBy_username"),
             requested_by_email=req.get("requestedBy_email"),
         )
+        logger.info(f"Recorded media_event: {title} ({media_type})")
+    else:
+        # INFO, not DEBUG: webhook volume is low and this is the only trace of
+        # "Overseerr called us but we didn't record anything" -- worth seeing
+        # by default, e.g. to confirm whether Overseerr sent MEDIA_AVAILABLE
+        # at all for a given item.
+        logger.info(f"Overseerr webhook: ignored notification_type={ntype!r} (subject={payload.get('subject')!r})")
     return web.json_response({"ok": True})

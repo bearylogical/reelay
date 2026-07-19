@@ -81,12 +81,14 @@ async def onBotChatMemberUpdate(update, context):
         try:
             adderMember = await context.bot.get_chat_member(chat.id, adder.id)
             adderIsGroupAdmin = adderMember.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"get_chat_member failed for {adder.id} in {chat.id}, falling back to needs-claim: {e}")
             adderIsGroupAdmin = False
 
         if adderIsGroupAdmin:
             db.upsertMembership(chat.id, adder.id, adder.username, role="admin", status="pending")
             db.approveMembership(chat.id, adder.id, approved_by=adder.id, role="admin")
+            logger.info(f"Scope {chat.id} auto-claimed by {adder.id} ({adder.username}) on add")
             await context.bot.send_message(
                 chat_id=chat.id,
                 text=i18n.t("reelay.GroupMode.Activated", name=adder.username or adder.first_name or str(adder.id), code=scope["invite_code"]),
@@ -113,7 +115,8 @@ async def claimAdmin(update, context):
     user = update.effective_user
     try:
         member = await context.bot.get_chat_member(chat.id, user.id)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"get_chat_member failed for {user.id} in {chat.id} during /claim: {e}")
         member = None
 
     if member is None or member.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER):
@@ -122,6 +125,7 @@ async def claimAdmin(update, context):
 
     db.upsertMembership(chat.id, user.id, user.username, role="admin", status="pending")
     db.approveMembership(chat.id, user.id, approved_by=user.id, role="admin")
+    logger.info(f"Scope {chat.id} claimed via /claim by {user.id} ({user.username})")
     await update.message.reply_text(
         i18n.t("reelay.GroupMode.Activated", name=user.username or user.first_name or str(user.id), code=scope["invite_code"])
     )
@@ -227,6 +231,14 @@ async def onShutdown(application):
     await miniapp.stop_server(application)
 
 
+async def onError(update, context):
+    """Global error handler: python-telegram-bot logs unhandled handler
+    exceptions through its own 'telegram.ext.Application' logger, which is
+    NOT a child of 'reelay' and never reaches reelay.log. Without this, a
+    ConnectionError/KeyError/etc raised mid-conversation leaves zero trace."""
+    logger.error(f"Unhandled exception while processing {update!r}: {context.error}", exc_info=context.error)
+
+
 # --- Reminders: onboarding-driven, watched-aware ------------------------------
 
 async def sendReminders(context):
@@ -292,6 +304,7 @@ def main():
     db.initDb()
 
     application = Application.builder().token(config["telegram"]["token"]).build()
+    application.add_error_handler(onError)
 
     join_handler_command = CommandHandler("join", onboarding.join)
     remindme_handler_command = CommandHandler("remindme", onboarding.remindme)
@@ -740,11 +753,12 @@ async def searchSerieMovie(update, context):
             chat_id=update.effective_message.chat_id,
             photo=context.user_data["output"][position]["poster"],
         )
-    except:
+    except Exception as e:
+        logger.debug(f"Could not send poster image: {e}")
         context.user_data["photo_update_msg"] = None
     else:
         context.user_data["photo_update_msg"] = img.message_id
-    
+
     if len(searchResult) == 1:
         keyboard = [
             [
@@ -879,11 +893,12 @@ async def nextOption(update, context):
             chat_id=update.effective_message.chat_id,
             photo=context.user_data["output"][position]["poster"],
         )
-    except:
+    except Exception as e:
+        logger.debug(f"Could not send poster image: {e}")
         context.user_data["photo_update_msg"] = None
     else:
         context.user_data["photo_update_msg"] = img.message_id
-    
+
     await context.bot.delete_message(
         message_id=context.user_data["update_msg"],
         chat_id=update.effective_message.chat_id,
