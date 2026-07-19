@@ -19,6 +19,39 @@ def test_scope_upsert_and_membership():
     assert m2["username"] == "alice2" and m2["role"] == "admin" and m2["status"] == "approved"
 
 
+def test_membership_role_and_removal():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "5", "alice", role="member", status="approved")
+    db.approveMembership("-100111", "5", approved_by="x")
+
+    db.setMembershipRole("-100111", "5", "editor")
+    assert db.getMembership("-100111", "5")["role"] == "editor"
+
+    assert db.removeMembership("-100111", "5") is True
+    assert db.getMembership("-100111", "5") is None
+    assert db.removeMembership("-100111", "5") is False
+
+
+def test_get_memberships_orders_pending_first():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "approved-user", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.upsertMembership("-100111", "2", "pending-user", status="pending")
+
+    rows = db.getMemberships("-100111")
+    assert [r["user_id"] for r in rows] == ["2", "1"]
+
+
+def test_join_policy_and_invite_rotation():
+    scope = db.upsertScope("-100111", title="Fam")
+    updated = db.setJoinPolicy("-100111", "auto")
+    assert updated["join_policy"] == "auto"
+
+    rotated = db.rotateInviteCode("-100111")
+    assert rotated["invite_code"] != scope["invite_code"]
+    assert db.getScopeByInviteCode(rotated["invite_code"])["chat_id"] == "-100111"
+
+
 def test_seerr_link_roundtrip():
     db.upsertScope("-100111", title="Fam")
     db.linkSeerr("-100111", "5", 42, seerr_username="bob", seerr_email="b@x.com")
