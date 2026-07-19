@@ -54,3 +54,17 @@ def test_summarize_requests_resolves_titles():
     with patch("reelay.overseerr.getMediaTitle", return_value=("The Matrix", "movie")):
         out = ov.summarizeRequests(raw)
     assert out[0]["title"] == "The Matrix" and out[0]["requestedById"] == 7
+
+
+def test_sign_in_with_plex_success():
+    resp = _resp({"id": 5, "displayName": "bob", "email": "b@x.com"})
+    resp.cookies = {"connect.sid": "abc123"}
+    with patch("reelay.overseerr.requests.post", return_value=resp):
+        user, cookie = ov.signInWithPlex("plex-token")
+    assert user["id"] == 5 and cookie == "abc123"
+
+
+def test_sign_in_with_plex_failure():
+    with patch("reelay.overseerr.requests.post", side_effect=Exception("boom")):
+        user, cookie = ov.signInWithPlex("plex-token")
+    assert user is None and cookie is None

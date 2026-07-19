@@ -176,7 +176,7 @@ def search(query, media_type):
     return results
 
 
-def _displayName(user):
+def displayName(user):
     """Overseerr computes displayName = username || plexUsername || email.
     Replicate that fallback here since the API doesn't always return it."""
     return (
@@ -214,7 +214,7 @@ def getUsers():
         for u in page:
             results.append({
                 "id": u.get("id"),
-                "displayName": _displayName(u),
+                "displayName": displayName(u),
                 "plexUsername": u.get("plexUsername"),
                 "email": u.get("email"),
                 "userType": u.get("userType"),
@@ -223,6 +223,24 @@ def getUsers():
             break
         skip += take
     return results
+
+
+def signInWithPlex(auth_token):
+    """Exchange a Plex authToken for an Overseerr session via Overseerr's own
+    public sign-in endpoint (no X-Api-Key needed -- it's the same endpoint
+    Overseerr's login page calls). Auto-creates the Overseerr user the first
+    time a given Plex account signs in. Returns (user_dict, session_cookie),
+    or (None, None) on failure."""
+    if not enabled():
+        return None, None
+    try:
+        resp = requests.post(f"{_base()}/auth/plex", json={"authToken": auth_token}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        return data, resp.cookies.get("connect.sid")
+    except Exception as e:
+        logger.warning(f"Overseerr signInWithPlex failed: {e}")
+        return None, None
 
 
 def createRequest(media_type, media_id, requested_by_seerr_id=None, is4k=False, seasons=None):

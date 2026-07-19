@@ -57,3 +57,20 @@ def test_reminder_threshold_awaiting():
     assert len(db.getMembershipsAwaitingReminderAnswer("5")) == 1
     db.setReminderThreshold("-100111", "5", 3)
     assert db.getMembershipsAwaitingReminderAnswer("5") == []
+
+
+def test_pending_memberships():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "6", "carol", status="pending")
+    db.upsertMembership("-100111", "7", "dave", status="approved")
+    db.approveMembership("-100111", "7", approved_by="x")
+    pending = db.getPendingMemberships("-100111")
+    assert len(pending) == 1 and pending[0]["user_id"] == "6"
+
+
+def test_set_membership_role():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "5", "a", status="approved")
+    db.approveMembership("-100111", "5", approved_by="x")
+    db.setMembershipRole("-100111", "5", "editor")
+    assert db.getMembership("-100111", "5")["role"] == "editor"

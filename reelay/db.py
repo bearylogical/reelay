@@ -277,6 +277,23 @@ def getApprovedMembers(scope_chat_id):
         return [dict(r) for r in rows]
 
 
+def getPendingMemberships(scope_chat_id):
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM memberships WHERE scope_chat_id = ? AND status = 'pending' ORDER BY requested_at",
+            (str(scope_chat_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def setMembershipRole(scope_chat_id, user_id, role):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE memberships SET role = ? WHERE scope_chat_id = ? AND user_id = ?",
+            (role, str(scope_chat_id), str(user_id)),
+        )
+
+
 def denyMembership(scope_chat_id, user_id):
     with _connect() as conn:
         conn.execute(
