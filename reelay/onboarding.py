@@ -208,6 +208,110 @@ async def linkme(update, context):
     )
 
 
+async def requestlink(update, context):
+    """/requestlink - admin command: DM approved members of the admin's scope
+    who haven't linked their Overseerr/Plex account yet, asking them to."""
+    if update.effective_chat.type != "private":
+        await update.message.reply_text(i18n.t("reelay.Onboarding.JoinDmOnly"))
+        return
+    if not overseerr.enabled():
+        await update.message.reply_text(i18n.t("reelay.Onboarding.LinkNoOverseerr"))
+        return
+
+    memberships = db.getApprovedMemberships(update.effective_user.id)
+    if not memberships:
+        await update.message.reply_text(i18n.t("reelay.Onboarding.NoMembership"))
+        return
+
+    # Same active-scope resolution as /linkme, so an admin in several groups
+    # targets whichever one they last /switch-ed to.
+    scope_chat_id = memberships[0]["scope_chat_id"]
+    active = db.getActiveScope(update.effective_user.id)
+    if active and any(m["scope_chat_id"] == active for m in memberships):
+        scope_chat_id = active
+
+    admin_membership = next((m for m in memberships if m["scope_chat_id"] == scope_chat_id), None)
+    if not admin_membership or admin_membership["role"] != "admin":
+        await update.message.reply_text(i18n.t("reelay.NotAdmin"))
+        return
+
+    scope = db.getScope(scope_chat_id)
+    title = scope.get("title") or scope_chat_id
+
+    unlinked = db.getApprovedMembersWithoutSeerrLink(scope_chat_id)
+    if not unlinked:
+        await update.message.reply_text(i18n.t("reelay.Onboarding.RequestLinkNoneUnlinked", title=title))
+        return
+
+    keyboard = [
+        [InlineKeyboardButton(
+            m.get("username") or m["user_id"],
+            callback_data=f"reqlink_{scope_chat_id}_{m['user_id']}",
+        )]
+        for m in unlinked
+    ]
+    keyboard.append([InlineKeyboardButton(
+        i18n.t("reelay.Onboarding.RequestLinkAllButton", count=len(unlinked)),
+        callback_data=f"reqlinkall_{scope_chat_id}",
+    )])
+    await update.message.reply_text(
+        i18n.t("reelay.Onboarding.RequestLinkPrompt", title=title),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handleRequestLink(update, context):
+    query = update.callback_query
+
+    if query.data.startswith("reqlinkall_"):
+        scope_chat_id = query.data[len("reqlinkall_"):]
+        if not _mayRequestLink(update.effective_user.id, scope_chat_id):
+            await query.answer(i18n.t("reelay.NotAdmin"), show_alert=True)
+            return
+        unlinked = db.getApprovedMembersWithoutSeerrLink(scope_chat_id)
+        sent = 0
+        for m in unlinked:
+            ok = await _sendLinkNudge(context, scope_chat_id, m["user_id"], m.get("username") or m["user_id"])
+            sent += 1 if ok else 0
+        await query.edit_message_text(i18n.t("reelay.Onboarding.RequestLinkSentAll", count=sent))
+        return
+
+    _, scope_chat_id, target_user_id = query.data.split("_", 2)
+    if not _mayRequestLink(update.effective_user.id, scope_chat_id):
+        await query.answer(i18n.t("reelay.NotAdmin"), show_alert=True)
+        return
+
+    membership = db.getMembership(scope_chat_id, target_user_id)
+    display_name = (membership.get("username") if membership else None) or target_user_id
+    if await _sendLinkNudge(context, scope_chat_id, target_user_id, display_name):
+        await query.edit_message_text(i18n.t("reelay.Onboarding.RequestLinkSent", name=display_name))
+    else:
+        await query.answer(i18n.t("reelay.Onboarding.RequestLinkFailed", name=display_name), show_alert=True)
+
+
+def _mayRequestLink(actor_id, scope_chat_id):
+    admin = db.getMembership(scope_chat_id, actor_id)
+    return bool(admin and admin["role"] == "admin" and admin["status"] == "approved")
+
+
+async def _sendLinkNudge(context, scope_chat_id, target_user_id, target_display):
+    """DM `target_user_id` asking them to link their Overseerr/Plex account,
+    then follow up with the picker so they can do it in one place. Returns
+    whether the DM went through (fails if the user never started a chat with
+    the bot)."""
+    scope = db.getScope(scope_chat_id)
+    try:
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=i18n.t("reelay.Onboarding.LinkNudge", title=scope.get("title") or scope_chat_id),
+        )
+    except Exception:
+        logger.warning(f"Could not DM link request to {target_user_id}.")
+        return False
+    await sendSeerrPicker(context, target_user_id, scope_chat_id, target_user_id, target_display)
+    return True
+
+
 async def askReminderThreshold(update, context):
     await askReminderThresholdFor(context, update.effective_user.id)
 

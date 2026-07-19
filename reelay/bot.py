@@ -303,6 +303,7 @@ def main():
     join_handler_command = CommandHandler("join", onboarding.join)
     remindme_handler_command = CommandHandler("remindme", onboarding.remindme)
     linkme_handler_command = CommandHandler("linkme", onboarding.linkme)
+    requestlink_handler_command = CommandHandler("requestlink", onboarding.requestlink)
     app_handler_command = CommandHandler("app", openApp)
     routehere_handler_command = CommandHandler("routehere", channels.routehere)
     routes_handler_command = CommandHandler("routes", channels.routes)
@@ -312,6 +313,7 @@ def main():
     switch_handler_callback = CallbackQueryHandler(handleSwitchScope, pattern=r"^switch_scope_")
     join_approval_handler_callback = CallbackQueryHandler(onboarding.handleApproval, pattern=r"^(approve|deny)_join_")
     seerr_link_handler_callback = CallbackQueryHandler(onboarding.handleSeerrLink, pattern=r"^(slink|sskip)_")
+    request_link_handler_callback = CallbackQueryHandler(onboarding.handleRequestLink, pattern=r"^reqlink")
     # Low group number so this runs before the add/delete ConversationHandlers'
     # text handlers -- it only acts (and stops propagation) when this user has
     # an unanswered onboarding reminder-threshold question pending.
@@ -507,12 +509,14 @@ def main():
     application.add_handler(join_handler_command)
     application.add_handler(remindme_handler_command)
     application.add_handler(linkme_handler_command)
+    application.add_handler(requestlink_handler_command)
     application.add_handler(app_handler_command)
     application.add_handler(routehere_handler_command)
     application.add_handler(routes_handler_command)
     application.add_handler(unroute_handler_command)
     application.add_handler(join_approval_handler_callback)
     application.add_handler(seerr_link_handler_callback)
+    application.add_handler(request_link_handler_callback)
 
     application.add_handler(auth_handler_command)
     application.add_handler(auth_handler_text)
