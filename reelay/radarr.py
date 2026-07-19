@@ -22,12 +22,17 @@ def search(title):
     parameters = {"term": title}
     url = commons.generateApiQuery("radarr", "movie/lookup", parameters)
     logger.info(url)
-    req = requests.get(url)
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(url)
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr search failed: {e}")
+        return False
 
     if req.status_code == 200 and parsed_json:
         return parsed_json
     else:
+        logger.warning(f"Radarr search returned status={req.status_code} for {title!r}")
         return False
 
 
@@ -51,34 +56,48 @@ def giveTitles(parsed_json):
 
 def inLibrary(tmdbId):
     parameters = {}
-    req = requests.get(commons.generateApiQuery("radarr", "movie", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("radarr", "movie", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr inLibrary check failed: {e}")
+        return False
     return next((True for movie in parsed_json if movie["tmdbId"] == tmdbId), False)
 
 
 def addToLibrary(tmdbId, path, qualityProfileId, tags):
     parameters = {"tmdbId": str(tmdbId)}
-    req = requests.get(
-        commons.generateApiQuery("radarr", "movie/lookup/tmdb", parameters)
-    )
-    parsed_json = json.loads(req.text)
-    data = json.dumps(buildData(parsed_json, path, qualityProfileId, tags))
-    add = requests.post(commons.generateApiQuery("radarr", "movie"), data=data, headers={'Content-Type': 'application/json'})
+    try:
+        req = requests.get(
+            commons.generateApiQuery("radarr", "movie/lookup/tmdb", parameters)
+        )
+        parsed_json = json.loads(req.text)
+        data = json.dumps(buildData(parsed_json, path, qualityProfileId, tags))
+        add = requests.post(commons.generateApiQuery("radarr", "movie"), data=data, headers={'Content-Type': 'application/json'})
+    except Exception as e:
+        logger.warning(f"Radarr addToLibrary failed for tmdbId={tmdbId}: {e}")
+        return False
     if add.status_code == 201:
         return True
     else:
+        logger.warning(f"Radarr addToLibrary rejected tmdbId={tmdbId}: status={add.status_code} body={add.text}")
         return False
 
 
 def removeFromLibrary(tmdbId):
-    parameters = { 
+    parameters = {
         "deleteFiles": str(True)
     }
-    dbId = getDbIdFromImdbId(tmdbId)
-    delete = requests.delete(commons.generateApiQuery("radarr", f"movie/{dbId}", parameters))
+    try:
+        dbId = getDbIdFromImdbId(tmdbId)
+        delete = requests.delete(commons.generateApiQuery("radarr", f"movie/{dbId}", parameters))
+    except Exception as e:
+        logger.warning(f"Radarr removeFromLibrary failed for tmdbId={tmdbId}: {e}")
+        return False
     if delete.status_code == 200:
         return True
     else:
+        logger.warning(f"Radarr removeFromLibrary rejected tmdbId={tmdbId}: status={delete.status_code}")
         return False
 
 
@@ -98,15 +117,22 @@ def buildData(json, path, qualityProfileId, tags):
 
 def getRootFolders():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("radarr", "Rootfolder", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json
+    try:
+        req = requests.get(commons.generateApiQuery("radarr", "Rootfolder", parameters))
+        return json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr getRootFolders failed: {e}")
+        return []
 
 
 def all_movies():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("radarr", "movie", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("radarr", "movie", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr all_movies failed: {e}")
+        return False
 
     if req.status_code == 200:
         data = []
@@ -125,32 +151,44 @@ def all_movies():
                 )
         return data
     else:
+        logger.warning(f"Radarr all_movies returned status={req.status_code}")
         return False
 
 
 def getQualityProfiles():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("radarr", "qualityProfile", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json
+    try:
+        req = requests.get(commons.generateApiQuery("radarr", "qualityProfile", parameters))
+        return json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr getQualityProfiles failed: {e}")
+        return []
 
 
 def getTags():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("radarr", "tag", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json
+    try:
+        req = requests.get(commons.generateApiQuery("radarr", "tag", parameters))
+        return json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Radarr getTags failed: {e}")
+        return []
 
 
 def createTag(tag):
-    data_json = {
-        "id": max([t["id"] for t in getTags()], default=0)+1,
-        "label": str(tag)
-    }
-    add = requests.post(commons.generateApiQuery("radarr", "tag"), json=data_json, headers={'Content-Type': 'application/json'})
+    try:
+        data_json = {
+            "id": max([t["id"] for t in getTags()], default=0)+1,
+            "label": str(tag)
+        }
+        add = requests.post(commons.generateApiQuery("radarr", "tag"), json=data_json, headers={'Content-Type': 'application/json'})
+    except Exception as e:
+        logger.warning(f"Radarr createTag failed for {tag!r}: {e}")
+        return False
     if add.status_code == 200:
         return True
     else:
+        logger.warning(f"Radarr createTag rejected {tag!r}: status={add.status_code}")
         return False
 
 

@@ -85,17 +85,23 @@ def _resolve_scope_for_user(user_id):
 
 
 def _authed(request):
-    """Returns (user_id, scope, membership, tg_user). Raises 401/403 otherwise."""
+    """Returns (user_id, scope, membership, tg_user). Raises 401/403 otherwise.
+    This is the single auth chokepoint for every Mini App endpoint, so every
+    rejection is logged here rather than duplicated at each call site."""
     raw = request.headers.get("X-Telegram-Init-Data") or request.query.get("initData")
     if not raw:
+        logger.warning(f"Mini App auth rejected ({request.path}): missing initData, remote={request.remote}")
         raise web.HTTPUnauthorized(text="missing initData")
     if not verify_telegram_init_data(raw, config["telegram"]["token"]):
+        logger.warning(f"Mini App auth rejected ({request.path}): invalid initData signature, remote={request.remote}")
         raise web.HTTPUnauthorized(text="invalid initData signature")
     tg_user = parse_user(raw)
     if not tg_user:
+        logger.warning(f"Mini App auth rejected ({request.path}): no user in initData, remote={request.remote}")
         raise web.HTTPUnauthorized(text="no user in initData")
     scope, membership = _resolve_scope_for_user(tg_user["id"])
     if not membership or membership["status"] != "approved":
+        logger.warning(f"Mini App auth rejected ({request.path}): {tg_user['id']} not an approved member")
         raise web.HTTPForbidden(text="not an approved member")
     return str(tg_user["id"]), scope, membership, tg_user
 
@@ -140,8 +146,9 @@ async def bootstrap(request):
 
 
 async def queue(request):
-    _, _, membership, _ = _authed(request)
+    user_id, _, membership, _ = _authed(request)
     if membership["role"] not in ("editor", "admin"):
+        logger.warning(f"Mini App: {user_id} (role={membership['role']}) denied /api/queue")
         raise web.HTTPForbidden(text="editor or admin required")
     items = []
     items.extend(radarr.getQueue())
@@ -203,6 +210,7 @@ async def submit_request(request):
         media_type, media_id, requested_by_seerr_id=link["seerr_user_id"], is4k=False, seasons=seasons
     )
     if not result:
+        logger.warning(f"Mini App: Overseerr request failed for {user_id}, mediaType={media_type}, mediaId={media_id}")
         return web.json_response({"ok": False, "error": "request_failed"}, status=502)
 
     # Announce into the scope's request channel (from_chat_id=None -> always
@@ -235,6 +243,7 @@ async def plex_start(request):
         return web.json_response({"ok": False, "error": "overseerr_disabled"}, status=400)
     pin = plex.createPin()
     if not pin:
+        logger.warning(f"Mini App: Plex PIN creation failed for {user_id} in scope {scope['chat_id']}")
         return web.json_response({"ok": False, "error": "plex_unavailable"}, status=502)
     _pruneExpiredPins()
     _pending_pins[pin["id"]] = {"user_id": user_id, "scope_chat_id": scope["chat_id"], "created_at": time.time()}
@@ -259,6 +268,7 @@ async def plex_poll(request):
 
     seerr_user, cookie = overseerr.signInWithPlex(token)
     if not seerr_user:
+        logger.warning(f"Mini App: Overseerr rejected Plex sign-in for {user_id} (pin {pin_id})")
         return web.json_response({"status": "error", "error": "overseerr_rejected"})
 
     name = overseerr.displayName(seerr_user)
@@ -313,25 +323,27 @@ async def approve_member(request):
     if not target_membership:
         raise web.HTTPNotFound(text="no such member")
     db.approveMembership(scope["chat_id"], target, approved_by=user_id)
+    logger.info(f"Scope {scope['chat_id']}: membership for {target} approved by {user_id} (Mini App)")
     await _notify(request, target, i18n.t("reelay.Onboarding.JoinApproved", title=scope.get("title") or scope["chat_id"]))
     return web.json_response({"ok": True})
 
 
 async def deny_member(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     target = request.match_info["user_id"]
     target_membership = db.getMembership(scope["chat_id"], target)
     if not target_membership:
         raise web.HTTPNotFound(text="no such member")
     db.denyMembership(scope["chat_id"], target)
+    logger.info(f"Scope {scope['chat_id']}: membership for {target} denied by {user_id} (Mini App)")
     display = target_membership.get("username") or target
     await _notify(request, target, i18n.t("reelay.Onboarding.Denied", name=display))
     return web.json_response({"ok": True})
 
 
 async def update_member_role(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     target = request.match_info["user_id"]
     target_membership = db.getMembership(scope["chat_id"], target)
@@ -346,9 +358,11 @@ async def update_member_role(request):
         raise web.HTTPBadRequest(text="bad_role")
     if target_membership["role"] == "admin" and role != "admin" \
             and len(db.getApprovedAdmins(scope["chat_id"])) <= 1:
+        logger.warning(f"Scope {scope['chat_id']}: {user_id} tried to demote last admin {target}")
         return web.json_response({"ok": False, "error": "last_admin"})
     db.setMembershipRole(scope["chat_id"], target, role)
     if role != target_membership["role"]:
+        logger.info(f"Scope {scope['chat_id']}: {target} role changed {target_membership['role']} -> {role} by {user_id}")
         display = target_membership.get("username") or target
         await _notify(request, target, i18n.t(
             "reelay.Onboarding.RoleChanged", title=scope.get("title") or scope["chat_id"], role=role,
@@ -357,7 +371,7 @@ async def update_member_role(request):
 
 
 async def remove_member(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     target = request.match_info["user_id"]
     target_membership = db.getMembership(scope["chat_id"], target)
@@ -365,15 +379,17 @@ async def remove_member(request):
         raise web.HTTPNotFound(text="no such member")
     if target_membership["role"] == "admin" and target_membership["status"] == "approved" \
             and len(db.getApprovedAdmins(scope["chat_id"])) <= 1:
+        logger.warning(f"Scope {scope['chat_id']}: {user_id} tried to remove last admin {target}")
         return web.json_response({"ok": False, "error": "last_admin"})
     db.removeMembership(scope["chat_id"], target)
+    logger.info(f"Scope {scope['chat_id']}: member {target} removed by {user_id}")
     if target_membership["status"] == "approved":
         await _notify(request, target, i18n.t("reelay.Onboarding.Removed", title=scope.get("title") or scope["chat_id"]))
     return web.json_response({"ok": True})
 
 
 async def update_scope(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     try:
         body = await request.json()
@@ -384,11 +400,13 @@ async def update_scope(request):
         if join_policy not in ("auto", "approval"):
             raise web.HTTPBadRequest(text="bad_join_policy")
         db.setJoinPolicy(scope["chat_id"], join_policy)
+        logger.info(f"Scope {scope['chat_id']}: join policy set to {join_policy!r} by {user_id}")
     allow_group_requests = body.get("allowGroupRequests")
     if allow_group_requests is not None:
         if not isinstance(allow_group_requests, bool):
             raise web.HTTPBadRequest(text="bad_allow_group_requests")
         db.setFeature(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, allow_group_requests)
+        logger.info(f"Scope {scope['chat_id']}: allowGroupRequests set to {allow_group_requests} by {user_id}")
 
     weekly_enabled = body.get("weeklyDigestEnabled")
     weekly_day = body.get("weeklyDigestDay")
@@ -400,6 +418,10 @@ async def update_scope(request):
     if weekly_enabled is not None or weekly_day is not None or weekly_hour is not None:
         try:
             db.setWeeklyDigestConfig(scope["chat_id"], enabled=weekly_enabled, day=weekly_day, hour=weekly_hour)
+            logger.info(
+                f"Scope {scope['chat_id']}: weekly digest updated by {user_id} "
+                f"(enabled={weekly_enabled}, day={weekly_day}, hour={weekly_hour})"
+            )
         except ValueError:
             raise web.HTTPBadRequest(text="bad_weekly_digest_config")
 
@@ -407,9 +429,10 @@ async def update_scope(request):
 
 
 async def regenerate_invite(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     updated = db.rotateInviteCode(scope["chat_id"])
+    logger.info(f"Scope {scope['chat_id']}: invite code regenerated by {user_id}")
     return web.json_response({"inviteCode": updated["invite_code"]})
 
 
@@ -421,8 +444,9 @@ async def regenerate_invite(request):
 # that must never be downloadable through the Mini App.
 
 async def export_scope(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
+    logger.info(f"Scope {scope['chat_id']}: settings exported by {user_id}")
     return web.json_response({
         "joinPolicy": scope["join_policy"],
         "features": db.getFeatures(scope["chat_id"]),
@@ -439,7 +463,7 @@ async def export_scope(request):
 
 
 async def import_scope(request):
-    _, scope, membership, _ = _authed(request)
+    user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
     try:
         body = await request.json()
@@ -486,6 +510,11 @@ async def import_scope(request):
         except ValueError:
             raise web.HTTPBadRequest(text="bad_weekly_digest")
 
+    logger.info(
+        f"Scope {scope['chat_id']}: settings imported by {user_id} "
+        f"(joinPolicy={join_policy is not None}, features={features is not None}, "
+        f"channelRoutes={routes is not None}, weeklyDigest={wd is not None})"
+    )
     return web.json_response({"ok": True})
 
 
@@ -512,6 +541,7 @@ async def approve_chat_request(request):
     _require_admin(membership)
     target = request.match_info["chat_id"]
     db.approveChatAccess(target, approved_by=user_id)
+    logger.info(f"Chat access request {target} approved by {user_id}")
     await _notify(request, target, i18n.t("reelay.Chatid added"))
     return web.json_response({"ok": True})
 
@@ -521,6 +551,7 @@ async def deny_chat_request(request):
     _require_admin(membership)
     target = request.match_info["chat_id"]
     db.denyChatAccess(target, denied_by=user_id)
+    logger.info(f"Chat access request {target} denied by {user_id}")
     await _notify(request, target, i18n.t("reelay.ChatAccess.Denied"))
     return web.json_response({"ok": True})
 
@@ -540,6 +571,7 @@ async def revoke_chat_request(request):
     _require_admin(membership)
     target = request.match_info["chat_id"]
     db.revokeChatAccess(target, revoked_by=user_id)
+    logger.info(f"Chat access for {target} revoked by {user_id}")
     await _notify(request, target, i18n.t("reelay.ChatAccess.Revoked"))
     return web.json_response({"ok": True})
 

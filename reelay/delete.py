@@ -14,7 +14,7 @@ from .conversation import getService, clearUserData, stop
 
 # Set up logging
 logLevel = logging.DEBUG if config.get("debugLogging", False) else logging.INFO
-logger = logger.getLogger("reelay.radarr", logLevel, config.get("logToConsole", False))
+logger = logger.getLogger("reelay.delete", logLevel, config.get("logToConsole", False))
 
 SERIE_MOVIE_DELETE, READ_DELETE_CHOICE,GIVE_OPTION = range(3)
 
@@ -194,7 +194,8 @@ async def confirmDelete(update, context):
                 chat_id=update.effective_message.chat_id,
                 photo=context.user_data["output"][position]["poster"],
             )
-        except:
+        except Exception as e:
+            logger.debug(f"Could not send poster image: {e}")
             context.user_data["photo_update_msg"] = None
         else:
             context.user_data["photo_update_msg"] = img.message_id
@@ -238,6 +239,7 @@ async def deleteSerieMovie(update, context):
         else:
             message=i18n.t("reelay.messages.DeleteSuccess", subjectWithArticle=i18n.t("reelay.SeriesWithArticle"))
     else:
+        logger.warning(f"removeFromLibrary failed for id={idnumber} ({choice}), requested by {update.effective_user.id}")
         if choice == i18n.t("reelay.Movie"):
             message=i18n.t("reelay.messages.DeleteFailed", subjectWithArticle=i18n.t("reelay.MovieWithArticle"))
         else:

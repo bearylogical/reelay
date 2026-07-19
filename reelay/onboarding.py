@@ -41,6 +41,7 @@ async def join(update, context):
     if scope["join_policy"] == "auto":
         db.upsertMembership(scope["chat_id"], user.id, user.username, status="approved")
         db.approveMembership(scope["chat_id"], user.id, approved_by="auto")
+        logger.info(f"Scope {scope['chat_id']}: {user.id} ({user.username}) auto-joined")
         await update.message.reply_text(
             i18n.t("reelay.Onboarding.JoinApproved", title=scope.get("title") or scope["chat_id"])
         )
@@ -55,6 +56,7 @@ async def join(update, context):
         return
 
     db.upsertMembership(scope["chat_id"], user.id, user.username, status="pending")
+    logger.info(f"Scope {scope['chat_id']}: {user.id} ({user.username}) requested to join (pending approval)")
     await update.message.reply_text(i18n.t("reelay.Onboarding.JoinPending", title=scope.get("title") or scope["chat_id"]))
 
     keyboard = [[
@@ -95,6 +97,7 @@ async def handleApproval(update, context):
 
     if action == "approve":
         db.approveMembership(scope_chat_id, target_user_id, approved_by=update.effective_user.id)
+        logger.info(f"Scope {scope_chat_id}: membership for {target_user_id} approved by {update.effective_user.id}")
         await query.edit_message_text(i18n.t("reelay.Onboarding.Approved", name=display_name))
         scope = db.getScope(scope_chat_id)
         try:
@@ -103,7 +106,7 @@ async def handleApproval(update, context):
                 text=i18n.t("reelay.Onboarding.JoinApproved", title=scope.get("title") or scope_chat_id),
             )
         except Exception:
-            pass
+            logger.warning(f"Could not DM {target_user_id} that their join was approved.")
         await askReminderThresholdFor(context, target_user_id)
         await askAnonymizeFor(context, target_user_id)
         # Ask the approving admin to map this member to their Overseerr/Plex
@@ -111,6 +114,7 @@ async def handleApproval(update, context):
         await sendSeerrPicker(context, update.effective_user.id, scope_chat_id, target_user_id, display_name)
     else:
         db.denyMembership(scope_chat_id, target_user_id)
+        logger.info(f"Scope {scope_chat_id}: membership for {target_user_id} denied by {update.effective_user.id}")
         await query.edit_message_text(i18n.t("reelay.Onboarding.Denied", name=display_name))
 
 
@@ -169,6 +173,7 @@ async def handleSeerrLink(update, context):
 
     db.linkSeerr(scope_chat_id, target_user_id, int(seerr_id),
                  seerr_username=seerr_username, seerr_email=seerr_email, mode="api")
+    logger.info(f"Scope {scope_chat_id}: {target_user_id} linked to Overseerr user {seerr_id} ({seerr_username})")
     await query.edit_message_text(i18n.t("reelay.Onboarding.LinkDone", account=seerr_username or seerr_id))
 
 

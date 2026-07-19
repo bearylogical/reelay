@@ -20,12 +20,17 @@ addSerieNeededFields = ["tvdbId", "tvRageId", "title", "titleSlug", "images", "s
 
 def search(title):
     parameters = {"term": title}
-    req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr search failed: {e}")
+        return False
 
     if req.status_code == 200 and parsed_json:
         return parsed_json
     else:
+        logger.warning(f"Sonarr search returned status={req.status_code} for {title!r}")
         return False
 
 
@@ -52,32 +57,46 @@ def giveTitles(parsed_json):
 
 def inLibrary(tvdbId):
     parameters = {}
-    req = requests.get(commons.generateApiQuery("sonarr", "series", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "series", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr inLibrary check failed: {e}")
+        return False
     return next((True for show in parsed_json if show["tvdbId"] == tvdbId), False)
 
 
 def addToLibrary(tvdbId, path, qualityProfileId, tags, seasonsSelected):
     parameters = {"term": "tvdb:" + str(tvdbId)}
-    req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
-    parsed_json = json.loads(req.text)
-    data = json.dumps(buildData(parsed_json, path, qualityProfileId, tags, seasonsSelected))
-    add = requests.post(commons.generateApiQuery("sonarr", "series"), data=data, headers={'Content-Type': 'application/json'})
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
+        parsed_json = json.loads(req.text)
+        data = json.dumps(buildData(parsed_json, path, qualityProfileId, tags, seasonsSelected))
+        add = requests.post(commons.generateApiQuery("sonarr", "series"), data=data, headers={'Content-Type': 'application/json'})
+    except Exception as e:
+        logger.warning(f"Sonarr addToLibrary failed for tvdbId={tvdbId}: {e}")
+        return False
     if add.status_code == 201:
         return True
     else:
+        logger.warning(f"Sonarr addToLibrary rejected tvdbId={tvdbId}: status={add.status_code} body={add.text}")
         return False
 
 
 def removeFromLibrary(tvdbId):
-    parameters = { 
+    parameters = {
         "deleteFiles": str(True)
     }
-    dbId = getDbIdFromImdbId(tvdbId)
-    delete = requests.delete(commons.generateApiQuery("sonarr", f"series/{dbId}", parameters))
+    try:
+        dbId = getDbIdFromImdbId(tvdbId)
+        delete = requests.delete(commons.generateApiQuery("sonarr", f"series/{dbId}", parameters))
+    except Exception as e:
+        logger.warning(f"Sonarr removeFromLibrary failed for tvdbId={tvdbId}: {e}")
+        return False
     if delete.status_code == 200:
         return True
     else:
+        logger.warning(f"Sonarr removeFromLibrary rejected tvdbId={tvdbId}: status={delete.status_code}")
         return False
 
 
@@ -106,8 +125,12 @@ def buildData(json, path, qualityProfileId, tags, seasonsSelected):
 
 def getRootFolders():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("sonarr", "Rootfolder", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "Rootfolder", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr getRootFolders failed: {e}")
+        return []
     # Remove unmappedFolders from rootFolder data--we don't need that
     for item in [
         item for item in parsed_json if item.get("unmappedFolders") is not None
@@ -118,8 +141,12 @@ def getRootFolders():
 
 def allSeries():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("sonarr", "series", parameters))
-    parsed_json = json.loads(req.text)
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "series", parameters))
+        parsed_json = json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr allSeries failed: {e}")
+        return False
 
     if req.status_code == 200:
         data = []
@@ -138,39 +165,55 @@ def allSeries():
                 )
         return data
     else:
+        logger.warning(f"Sonarr allSeries returned status={req.status_code}")
         return False
 
 
 def getQualityProfiles():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("sonarr", "qualityProfile", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "qualityProfile", parameters))
+        return json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr getQualityProfiles failed: {e}")
+        return []
 
 
 def getTags():
     parameters = {}
-    req = requests.get(commons.generateApiQuery("sonarr", "tag", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "tag", parameters))
+        return json.loads(req.text)
+    except Exception as e:
+        logger.warning(f"Sonarr getTags failed: {e}")
+        return []
 
 
 def createTag(tag):
-    data_json = {
-        "id": int(max([t["id"] for t in getTags()], default=0)+1),
-        "label": str(tag)
-    }
-    add = requests.post(commons.generateApiQuery("sonarr", "tag"), json=data_json, headers={'Content-Type': 'application/json'})
+    try:
+        data_json = {
+            "id": int(max([t["id"] for t in getTags()], default=0)+1),
+            "label": str(tag)
+        }
+        add = requests.post(commons.generateApiQuery("sonarr", "tag"), json=data_json, headers={'Content-Type': 'application/json'})
+    except Exception as e:
+        logger.warning(f"Sonarr createTag failed for {tag!r}: {e}")
+        return False
     if add.status_code == 200:
         return True
     else:
+        logger.warning(f"Sonarr createTag rejected {tag!r}: status={add.status_code}")
         return False
 
 def getSeasons(tvdbId):
     parameters = {"term": "tvdb:" + str(tvdbId)}
-    req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
-    parsed_json = json.loads(req.text)
-    return parsed_json[0]["seasons"]
+    try:
+        req = requests.get(commons.generateApiQuery("sonarr", "series/lookup", parameters))
+        parsed_json = json.loads(req.text)
+        return parsed_json[0]["seasons"]
+    except Exception as e:
+        logger.warning(f"Sonarr getSeasons failed for tvdbId={tvdbId}: {e}")
+        return []
 
 
 def getDbIdFromImdbId(tvdbId):
