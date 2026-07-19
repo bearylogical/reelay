@@ -53,7 +53,7 @@ en-us:
     NeedsClaim: "I've been added, but whoever added me isn't a Telegram admin of this group. An existing group admin should run /claim here to activate Reelay."
     ClaimGroupOnly: "/claim only works inside the group you want to activate."
     ClaimNotAdmin: "You need to be a Telegram admin of this group to claim Reelay here."
-    WelcomeNewMember: "👋 %{name}, to use Reelay here, DM me /join %{code}."
+    WelcomeNewMember: "👋 %{name}, to send requests DM me [here](%{link})."
     SwitchDmOnly: "/switch only works in a private chat with me."
     OnlyOneScope: "You're only in one group (%{title}), nothing to switch to."
     SwitchPrompt: "Which group do you want to act in?"

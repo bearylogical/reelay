@@ -150,7 +150,12 @@ async def onMemberChatMemberUpdate(update, context):
 
     await context.bot.send_message(
         chat_id=chat.id,
-        text=i18n.t("reelay.GroupMode.WelcomeNewMember", name=user.username or user.first_name or str(user.id), code=scope["invite_code"]),
+        text=i18n.t(
+            "reelay.GroupMode.WelcomeNewMember",
+            name=user.username or user.first_name or str(user.id),
+            link=f"https://t.me/{context.bot.username}",
+        ),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
 
