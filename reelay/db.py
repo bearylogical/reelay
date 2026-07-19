@@ -361,6 +361,17 @@ def getSeerrLinkByOverseerrUser(scope_chat_id, seerr_user_id):
         return dict(row) if row else None
 
 
+def getApprovedMembersWithoutSeerrLink(scope_chat_id):
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT m.* FROM memberships m"
+            " LEFT JOIN seerr_links sl ON sl.scope_chat_id = m.scope_chat_id AND sl.user_id = m.user_id"
+            " WHERE m.scope_chat_id = ? AND m.status = 'approved' AND sl.user_id IS NULL",
+            (str(scope_chat_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # --- reminder_state -----------------------------------------------------------
 
 def getReminderState(scope_chat_id, seerr_request_id, user_id):

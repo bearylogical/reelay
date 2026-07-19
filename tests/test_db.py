@@ -60,6 +60,17 @@ def test_seerr_link_roundtrip():
     assert db.getSeerrLinkByOverseerrUser("-100111", 42)["user_id"] == "5"
 
 
+def test_approved_members_without_seerr_link():
+    db.upsertScope("-100111", title="Fam")
+    for uid in ("5", "6", "7"):
+        db.upsertMembership("-100111", uid, f"user{uid}", status="approved")
+        db.approveMembership("-100111", uid, approved_by="1")
+    db.linkSeerr("-100111", "6", 42, seerr_username="bob")
+
+    unlinked = db.getApprovedMembersWithoutSeerrLink("-100111")
+    assert {m["user_id"] for m in unlinked} == {"5", "7"}
+
+
 def test_channel_routes():
     db.upsertScope("-100111", title="Fam")
     db.setChannelRoute("-100111", "requests", "-100111", "7")

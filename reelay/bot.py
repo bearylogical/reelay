@@ -303,6 +303,7 @@ def main():
     join_handler_command = CommandHandler("join", onboarding.join)
     remindme_handler_command = CommandHandler("remindme", onboarding.remindme)
     linkme_handler_command = CommandHandler("linkme", onboarding.linkme)
+    requestlink_handler_command = CommandHandler("requestlink", onboarding.requestlink)
     app_handler_command = CommandHandler("app", openApp)
     routehere_handler_command = CommandHandler("routehere", channels.routehere)
     routes_handler_command = CommandHandler("routes", channels.routes)
@@ -312,21 +313,28 @@ def main():
     switch_handler_callback = CallbackQueryHandler(handleSwitchScope, pattern=r"^switch_scope_")
     join_approval_handler_callback = CallbackQueryHandler(onboarding.handleApproval, pattern=r"^(approve|deny)_join_")
     seerr_link_handler_callback = CallbackQueryHandler(onboarding.handleSeerrLink, pattern=r"^(slink|sskip)_")
+    request_link_handler_callback = CallbackQueryHandler(onboarding.handleRequestLink, pattern=r"^reqlink")
     # Low group number so this runs before the add/delete ConversationHandlers'
     # text handlers -- it only acts (and stops propagation) when this user has
     # an unanswered onboarding reminder-threshold question pending.
     reminder_reply_catcher = MessageHandler(filters.TEXT & ~filters.COMMAND, onboarding.catchReminderThresholdReply)
 
+    # Bare-word (no-slash) entrypoint matches are a private-chat convenience
+    # only -- in a group, ordinary conversation can accidentally contain
+    # these keywords (e.g. someone just saying "delete" or "auth"), which
+    # would otherwise fire the handler on every member's behalf and, for
+    # /auth specifically, publicly broadcast a "wrong password" reply. The
+    # explicit /command form is unambiguous and stays enabled everywhere.
     auth_handler_command = CommandHandler(config["entrypointAuth"], authentication)
     auth_handler_text = MessageHandler(
-                            filters.Regex(
+                            filters.ChatType.PRIVATE & filters.Regex(
                                 re.compile(r"^" + config["entrypointAuth"] + "$", re.IGNORECASE)
                             ),
                             authentication,
                         )
     allSeries_handler_command = CommandHandler(config["entrypointAllSeries"], listing.allSeries)
     allSeries_handler_text = MessageHandler(
-                            filters.Regex(
+                            filters.ChatType.PRIVATE & filters.Regex(
                                 re.compile(r"^" + config["entrypointAllSeries"] + "$", re.IGNORECASE)
                             ),
                             listing.allSeries,
@@ -334,7 +342,7 @@ def main():
 
     allMovies_handler_command = CommandHandler(config["entrypointAllMovies"], listing.allMovies)
     allMovies_handler_text = MessageHandler(
-        filters.Regex(
+        filters.ChatType.PRIVATE & filters.Regex(
             re.compile(r"^" + config["entrypointAllMovies"] + "$", re.IGNORECASE)
         ),
         listing.allMovies,
@@ -344,7 +352,7 @@ def main():
         entry_points=[
             CommandHandler(config["entrypointDelete"], delete.delete),
             MessageHandler(
-                filters.Regex(
+                filters.ChatType.PRIVATE & filters.Regex(
                     re.compile(r'^' + config["entrypointDelete"] + '$', re.IGNORECASE)
                 ),
                 delete.delete,
@@ -385,7 +393,7 @@ def main():
             CommandHandler(i18n.t("reelay.Movie"), startSerieMovie),
             CommandHandler(i18n.t("reelay.Series"), startSerieMovie),
             MessageHandler(
-                filters.Regex(
+                filters.ChatType.PRIVATE & filters.Regex(
                     re.compile(r'^' + config["entrypointAdd"] + '$', re.IGNORECASE)
                 ),
                 startSerieMovie,
@@ -449,9 +457,9 @@ def main():
             entry_points=[
                 CommandHandler(config["entrypointTransmission"], transmission.transmission),
                 MessageHandler(
-                    filters.Regex(
+                    filters.ChatType.PRIVATE & filters.Regex(
                         re.compile(
-                            r"" + config["entrypointTransmission"] + "", re.IGNORECASE
+                            r"^" + config["entrypointTransmission"] + "$", re.IGNORECASE
                         )
                     ),
                     transmission.transmission,
@@ -475,9 +483,9 @@ def main():
             entry_points=[
                 CommandHandler(config["entrypointSabnzbd"], sabnzbd.sabnzbd),
                 MessageHandler(
-                    filters.Regex(
+                    filters.ChatType.PRIVATE & filters.Regex(
                         re.compile(
-                            r"" + config["entrypointSabnzbd"] + "", re.IGNORECASE
+                            r"^" + config["entrypointSabnzbd"] + "$", re.IGNORECASE
                         )
                     ),
                     sabnzbd.sabnzbd,
@@ -507,12 +515,14 @@ def main():
     application.add_handler(join_handler_command)
     application.add_handler(remindme_handler_command)
     application.add_handler(linkme_handler_command)
+    application.add_handler(requestlink_handler_command)
     application.add_handler(app_handler_command)
     application.add_handler(routehere_handler_command)
     application.add_handler(routes_handler_command)
     application.add_handler(unroute_handler_command)
     application.add_handler(join_approval_handler_callback)
     application.add_handler(seerr_link_handler_callback)
+    application.add_handler(request_link_handler_callback)
 
     application.add_handler(auth_handler_command)
     application.add_handler(auth_handler_text)
