@@ -101,10 +101,10 @@ miniapp:
 # (see overseerr.webhookSecret above) and, once a week, posts a library-wide
 # roundup into each group's #updates topic (set with /routehere updates) and
 # DMs each member the items they personally requested that went available.
+# This only turns the feature on/off system-wide -- each group picks its own
+# day of week, hour, and on/off from the Mini App's Members tab.
 weeklyDigest:
   enable: false
-  day: monday   # monday..sunday
-  hour: 9       # local hour, 0-23
 
 # Optional settings:
 ## Language

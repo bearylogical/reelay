@@ -33,5 +33,5 @@ DEFAULT_SETTINGS = {
     "reminderDefaultDays": 3,
     "reminderCheckHour": 9,
     "miniapp": { "enable": False, "url": "", "listenHost": "0.0.0.0", "listenPort": 8080 },
-    "weeklyDigest": { "enable": False, "day": "monday", "hour": 9 },
+    "weeklyDigest": { "enable": False },
 }

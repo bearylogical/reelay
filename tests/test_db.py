@@ -1,3 +1,8 @@
+import sqlite3
+
+import pytest
+
+import reelay.config as cfg
 import reelay.db as db
 
 
@@ -77,6 +82,67 @@ def test_channel_routes():
     assert db.getChannelRoute("-100111", "requests")["dest_thread_id"] == "7"
     assert db.deleteChannelRoute("-100111", "requests") is True
     assert db.getChannelRoute("-100111", "requests") is None
+
+
+def test_weekly_digest_config_defaults_and_partial_update():
+    db.upsertScope("-100111", title="Fam")
+    scope = db.getScope("-100111")
+    assert scope["weekly_digest_enabled"] == 0
+    assert scope["weekly_digest_day"] == "monday"
+    assert scope["weekly_digest_hour"] == 9
+
+    updated = db.setWeeklyDigestConfig("-100111", enabled=True)
+    assert updated["weekly_digest_enabled"] == 1
+    assert updated["weekly_digest_day"] == "monday"  # untouched by partial update
+
+    updated = db.setWeeklyDigestConfig("-100111", day="friday", hour=18)
+    assert updated["weekly_digest_day"] == "friday" and updated["weekly_digest_hour"] == 18
+    assert updated["weekly_digest_enabled"] == 1  # untouched
+
+
+def test_weekly_digest_config_rejects_invalid_values():
+    db.upsertScope("-100111", title="Fam")
+    with pytest.raises(ValueError):
+        db.setWeeklyDigestConfig("-100111", day="someday")
+    with pytest.raises(ValueError):
+        db.setWeeklyDigestConfig("-100111", hour=24)
+
+
+def test_scopes_due_for_weekly_digest():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertScope("-100222", title="Other")
+    db.setWeeklyDigestConfig("-100111", enabled=True, day="monday", hour=9)
+    db.setWeeklyDigestConfig("-100222", enabled=False, day="monday", hour=9)
+
+    due = db.getScopesDueForWeeklyDigest("monday", 9, "2026-07-20")
+    assert [s["chat_id"] for s in due] == ["-100111"]
+
+    db.markWeeklyDigestSent("-100111", "2026-07-20")
+    assert db.getScopesDueForWeeklyDigest("monday", 9, "2026-07-20") == []
+    # a new day makes it due again
+    assert [s["chat_id"] for s in db.getScopesDueForWeeklyDigest("monday", 9, "2026-07-27")] == ["-100111"]
+
+
+def test_migrate_legacy_weekly_digest_config_seeds_from_yaml(tmp_path, monkeypatch):
+    # Simulate a pre-upgrade DB: a scopes table without the weekly_digest_* columns.
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "legacy.db"))
+    conn = sqlite3.connect(db.DB_PATH)
+    conn.execute(
+        "CREATE TABLE scopes (chat_id TEXT PRIMARY KEY, message_thread_id TEXT, title TEXT,"
+        " invite_code TEXT UNIQUE NOT NULL, join_policy TEXT NOT NULL DEFAULT 'approval',"
+        " is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+    )
+    conn.execute("INSERT INTO scopes (chat_id, invite_code, created_at) VALUES ('-100999', 'ABCD1234', '2024-01-01')")
+    conn.commit()
+    conn.close()
+
+    cfg.config["weeklyDigest"] = {"enable": True, "day": "wednesday", "hour": 14}
+    db.initDb()
+
+    scope = db.getScope("-100999")
+    assert scope["weekly_digest_enabled"] == 1
+    assert scope["weekly_digest_day"] == "wednesday"
+    assert scope["weekly_digest_hour"] == 14
 
 
 def test_media_events():

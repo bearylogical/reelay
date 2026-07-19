@@ -82,6 +82,7 @@
   </header>
 
   <div class="panel active" id="p-requests">
+    <div class="card" id="weeklyCard" style="display:none"></div>
     <div class="chips" id="counts"></div>
     <div id="requests"></div>
   </div>
@@ -110,6 +111,38 @@
       <button data-allow="false" class="active">Requests off in group</button>
       <button data-allow="true">Requests on in group</button>
     </div>
+
+    <div class="section-title">Weekly digest</div>
+    <div class="seg" id="weeklyDigestSeg">
+      <button data-enabled="false" class="active">Off</button>
+      <button data-enabled="true">On</button>
+    </div>
+    <div class="card">
+      <div class="body">
+        <div class="t">Post day &amp; time</div>
+        <div class="m">
+          <select class="role-select" id="weeklyDigestDay"></select>
+          <select class="role-select" id="weeklyDigestHour"></select>
+        </div>
+      </div>
+      <div class="side">
+        <button class="req-btn" id="sendWeeklyNow">Send now</button>
+      </div>
+    </div>
+
+    <div class="section-title">Backup</div>
+    <div class="card">
+      <div class="body">
+        <div class="t">Settings backup</div>
+        <div class="m">Join policy, toggles, channel routing, and the weekly digest schedule for this group.</div>
+      </div>
+      <div class="side">
+        <button class="req-btn" id="exportSettings">Export</button>
+        <button class="req-btn" id="importSettings">Restore</button>
+      </div>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none">
+
     <div id="members"></div>
     <div id="openChats"></div>
   </div>
@@ -161,6 +194,35 @@ function toast(msg) {
 
 function icon(mt) { return mt === "tv" ? "📺" : "🎬"; }
 
+const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+el("weeklyDigestDay").innerHTML = WEEKDAYS.map(d => `<option value="${d}">${d[0].toUpperCase() + d.slice(1)}</option>`).join("");
+el("weeklyDigestHour").innerHTML = Array.from({ length: 24 }, (_, h) =>
+  `<option value="${h}">${String(h).padStart(2, "0")}:00</option>`).join("");
+
+async function loadWeekly() {
+  const box = el("weeklyCard");
+  try {
+    const data = await api("/api/weekly");
+    const total = (data.counts.movie || 0) + (data.counts.tv || 0);
+    if (!total) { box.style.display = "none"; return; }
+    box.style.display = ""; box.style.cursor = "pointer"; box.dataset.expanded = "false";
+    box.innerHTML = `<div class="body">
+      <div class="t">This week</div>
+      <div class="m">🎬 ${data.counts.movie} movie${data.counts.movie === 1 ? "" : "s"} · 📺 ${data.counts.tv} show${data.counts.tv === 1 ? "" : "s"}</div>
+      <div class="m" id="weeklyList" style="display:none"></div>
+    </div>`;
+    box.onclick = () => {
+      const list = el("weeklyList");
+      const expanded = box.dataset.expanded === "true";
+      box.dataset.expanded = expanded ? "false" : "true";
+      list.style.display = expanded ? "none" : "block";
+      if (!expanded) {
+        list.innerHTML = [...data.movies.map(t => `🎬 ${H(t)}`), ...data.tv.map(t => `📺 ${H(t)}`)].join("<br>");
+      }
+    };
+  } catch (e) { box.style.display = "none"; }
+}
+
 function renderRequests(data) {
   const c = el("counts"); c.innerHTML = "";
   const co = data.counts || {};
@@ -210,6 +272,9 @@ async function loadMembers() {
     el("inviteCode").textContent = data.inviteCode;
     document.querySelectorAll("#policySeg button").forEach(b => b.classList.toggle("active", b.dataset.policy === data.joinPolicy));
     document.querySelectorAll("#groupReqSeg button").forEach(b => b.classList.toggle("active", (b.dataset.allow === "true") === data.allowGroupRequests));
+    document.querySelectorAll("#weeklyDigestSeg button").forEach(b => b.classList.toggle("active", (b.dataset.enabled === "true") === data.weeklyDigest.enabled));
+    el("weeklyDigestDay").value = data.weeklyDigest.day;
+    el("weeklyDigestHour").value = String(data.weeklyDigest.hour);
     if (!data.members.length) { box.innerHTML = `<div class="empty">No members yet.</div>`; return; }
     box.innerHTML = data.members.map(memberRowHtml).join("");
     box.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.approve, "approve")));
@@ -354,6 +419,75 @@ document.querySelectorAll("#groupReqSeg button").forEach(b => b.addEventListener
     toast("Group request setting updated");
   } catch (e) { toast("Couldn't update group request setting"); }
 }));
+
+document.querySelectorAll("#weeklyDigestSeg button").forEach(b => b.addEventListener("click", async () => {
+  document.querySelectorAll("#weeklyDigestSeg button").forEach(x => x.classList.toggle("active", x === b));
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weeklyDigestEnabled: b.dataset.enabled === "true" }),
+    });
+    toast("Weekly digest updated");
+  } catch (e) { toast("Couldn't update weekly digest"); }
+}));
+
+el("weeklyDigestDay").addEventListener("change", async () => {
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weeklyDigestDay: el("weeklyDigestDay").value }),
+    });
+    toast("Weekly digest day updated");
+  } catch (e) { toast("Couldn't update weekly digest day"); }
+});
+
+el("weeklyDigestHour").addEventListener("change", async () => {
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weeklyDigestHour: +el("weeklyDigestHour").value }),
+    });
+    toast("Weekly digest time updated");
+  } catch (e) { toast("Couldn't update weekly digest time"); }
+});
+
+el("sendWeeklyNow").addEventListener("click", async () => {
+  if (!await confirmDialog("Post this week's update to the group now?")) return;
+  const btn = el("sendWeeklyNow");
+  btn.disabled = true;
+  try {
+    const res = await api("/api/weekly/send", { method: "POST" });
+    toast(res.ok ? "Posted to the group" : "Nothing new to post this week");
+  } catch (e) { toast("Couldn't post the update"); }
+  btn.disabled = false;
+});
+
+el("exportSettings").addEventListener("click", async () => {
+  try {
+    const data = await api("/api/scope/export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "reelay-settings.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    toast("Settings exported");
+  } catch (e) { toast("Couldn't export settings"); }
+});
+
+el("importSettings").addEventListener("click", () => el("importFile").click());
+
+el("importFile").addEventListener("change", async () => {
+  const file = el("importFile").files[0];
+  el("importFile").value = "";
+  if (!file) return;
+  if (!await confirmDialog("Restore settings from this file? This will overwrite the group's current join policy, toggles, channel routing, and weekly digest schedule.")) return;
+  try {
+    const body = JSON.parse(await file.text());
+    await api("/api/scope/import", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    toast("Settings restored");
+    loadMembers();
+  } catch (e) { toast("Couldn't restore settings"); }
+});
 
 el("copyInvite").addEventListener("click", () => {
   const code = el("inviteCode").textContent;
@@ -516,6 +650,7 @@ el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer
     if (data.role === "admin") el("tab-members").style.display = "";
     renderRequests(data);
     renderAccount(data);
+    loadWeekly();
   } catch (e) {
     document.body.innerHTML = `<div class="empty">Couldn't load. ${H(String(e.message || e))}</div>`;
   }

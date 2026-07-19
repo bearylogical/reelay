@@ -219,21 +219,6 @@ async def onShutdown(application):
     await miniapp.stop_server(application)
 
 
-_WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-             "friday": 4, "saturday": 5, "sunday": 6}
-
-
-def _nextWeekly(day, hour):
-    """Next datetime matching `day` (name) at `hour`, local time."""
-    target_dow = _WEEKDAYS.get(str(day).lower(), 0)
-    now = datetime.now()
-    days_ahead = (target_dow - now.weekday()) % 7
-    target = now.replace(hour=hour, minute=0, second=0, microsecond=0) + timedelta(days=days_ahead)
-    if target <= now:
-        target += timedelta(days=7)
-    return target
-
-
 # --- Reminders: onboarding-driven, watched-aware ------------------------------
 
 async def sendReminders(context):
@@ -545,12 +530,13 @@ def main():
         )
 
     if digest.enabled():
-        wd = config.get("weeklyDigest", {})
+        # Each scope picks its own day/hour (and on/off) in the Mini App;
+        # this hourly tick just checks who's due right now.
         application.job_queue.run_repeating(
-            digest.send_weekly_digest,
-            interval=timedelta(weeks=1),
-            first=_nextWeekly(wd.get("day", "monday"), int(wd.get("hour", 9))),
-            name="weekly_digest",
+            digest.weekly_digest_tick,
+            interval=timedelta(hours=1),
+            first=0,
+            name="weekly_digest_tick",
         )
 
     # Launch the Mini App server + menu button once the loop is up, and tear
