@@ -107,6 +107,7 @@
       <button data-policy="auto">Auto-join</button>
     </div>
     <div id="members"></div>
+    <div id="openChats"></div>
   </div>
 
   <div class="panel" id="p-browse">
@@ -212,6 +213,7 @@ async function loadMembers() {
     box.querySelectorAll("[data-role-select]").forEach(s => s.addEventListener("change", () => changeRole(s.dataset.roleSelect, s.value)));
   } catch (e) { box.innerHTML = `<div class="empty">Couldn't load members.</div>`; }
   loadChatRequests();
+  loadOpenChats();
 }
 
 async function loadChatRequests() {
@@ -243,6 +245,36 @@ async function chatRequestAction(chatId, action) {
     toast(action === "approve" ? "Approved" : "Denied");
   } catch (e) { toast("Couldn't update request"); }
   loadChatRequests();
+}
+
+async function loadOpenChats() {
+  const wrap = el("openChats");
+  try {
+    const chats = await api("/api/open-chats");
+    if (!chats.length) { wrap.innerHTML = ""; return; }
+    wrap.innerHTML = `<div class="section-title">Open chats</div>`
+      + chats.map(openChatRowHtml).join("");
+    wrap.querySelectorAll("[data-chat-revoke]").forEach(b => b.addEventListener("click", () => revokeChat(b.dataset.chatRevoke)));
+  } catch (e) { wrap.innerHTML = ""; }
+}
+
+function openChatRowHtml(r) {
+  const name = H(r.displayName || r.chatId);
+  return `<div class="card">
+    <div class="body"><div class="t">${name}</div><div class="m">chat ${H(r.chatId)}</div></div>
+    <div class="side">
+      <button class="req-btn" data-chat-revoke="${H(r.chatId)}">Revoke</button>
+    </div>
+  </div>`;
+}
+
+async function revokeChat(chatId) {
+  if (!await confirmDialog("Revoke this chat's access? It will no longer be able to use Reelay's direct commands.")) return;
+  try {
+    await api(`/api/open-chats/${chatId}/revoke`, { method: "POST" });
+    toast("Revoked");
+  } catch (e) { toast("Couldn't revoke access"); }
+  loadOpenChats();
 }
 
 function memberRowHtml(m) {

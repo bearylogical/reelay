@@ -394,6 +394,25 @@ async def deny_chat_request(request):
     return web.json_response({"ok": True})
 
 
+async def open_chats(request):
+    _, _, membership, _ = _authed(request)
+    _require_admin(membership)
+    rows = db.getApprovedChatAccessRequests()
+    return web.json_response([
+        {"chatId": r["chat_id"], "displayName": r["display_name"], "approvedAt": r["decided_at"]}
+        for r in rows
+    ])
+
+
+async def revoke_chat_request(request):
+    user_id, _, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["chat_id"]
+    db.revokeChatAccess(target, revoked_by=user_id)
+    await _notify(request, target, i18n.t("reelay.ChatAccess.Revoked"))
+    return web.json_response({"ok": True})
+
+
 def build_app(bot):
     app = web.Application()
     app["bot"] = bot
@@ -415,6 +434,8 @@ def build_app(bot):
     app.router.add_get("/api/chat-requests", chat_requests)
     app.router.add_post("/api/chat-requests/{chat_id}/approve", approve_chat_request)
     app.router.add_post("/api/chat-requests/{chat_id}/deny", deny_chat_request)
+    app.router.add_get("/api/open-chats", open_chats)
+    app.router.add_post("/api/open-chats/{chat_id}/revoke", revoke_chat_request)
     # Overseerr status events -> the scope's #updates topic.
     app.router.add_post("/overseerr/webhook/{secret}", webhooks.handle_overseerr)
     return app
