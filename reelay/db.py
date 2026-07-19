@@ -8,6 +8,9 @@ from .definitions import CHATID_PATH, DB_PATH
 
 _INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # unambiguous, no 0/O/1/I/L
 
+# scope_features keys. Add new per-chat toggles here rather than a new column.
+FEATURE_GROUP_REQUESTS = "group_requests"  # allow add/start requests inside the group itself, vs. DM-only
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -94,6 +97,17 @@ def initDb():
                 active_scope_chat_id    TEXT REFERENCES scopes(chat_id)
             );
 
+            -- Generic per-scope feature toggle store. `feature` is a free-form
+            -- key (see the FEATURE_* constants below); a missing row means the
+            -- caller's own default applies -- this table only ever records
+            -- explicit overrides, so new features need no backfill.
+            CREATE TABLE IF NOT EXISTS scope_features (
+                scope_chat_id   TEXT NOT NULL REFERENCES scopes(chat_id) ON DELETE CASCADE,
+                feature         TEXT NOT NULL,
+                enabled         INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (scope_chat_id, feature)
+            );
+
             -- Where the bot posts a given category of output within a scope.
             -- category is e.g. 'requests' (extensible to 'reminders',
             -- 'approvals'). dest_chat_id + dest_thread_id target a Telegram
@@ -143,6 +157,28 @@ def initDb():
             pass
 
     _migrateLegacyChatIds()
+    _migrateLegacyAllowGroupRequests()
+
+
+def _migrateLegacyAllowGroupRequests():
+    """One-time (idempotent) carry-over of the short-lived scopes.allow_group_requests
+    column into the generic scope_features table, then drop the column so
+    scope_features is the single source of truth for scope-level toggles."""
+    with _connect() as conn:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(scopes)").fetchall()]
+        if "allow_group_requests" not in cols:
+            return
+        rows = conn.execute(
+            "SELECT chat_id FROM scopes WHERE allow_group_requests != 0"
+        ).fetchall()
+        conn.executemany(
+            "INSERT OR IGNORE INTO scope_features (scope_chat_id, feature, enabled) VALUES (?, ?, 1)",
+            [(r["chat_id"], FEATURE_GROUP_REQUESTS) for r in rows],
+        )
+        try:
+            conn.execute("ALTER TABLE scopes DROP COLUMN allow_group_requests")
+        except sqlite3.OperationalError:
+            pass
 
 
 def _migrateLegacyChatIds():
@@ -212,6 +248,41 @@ def setJoinPolicy(chat_id, join_policy):
     with _connect() as conn:
         conn.execute("UPDATE scopes SET join_policy = ? WHERE chat_id = ?", (join_policy, str(chat_id)))
     return getScope(chat_id)
+
+
+# --- scope_features (generic per-chat feature management) ---------------------
+#
+# A reusable key/value toggle store for scope-level features -- add a new
+# FEATURE_* constant above and call these instead of adding another column.
+
+def isFeatureEnabled(scope_chat_id, feature, default=False):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT enabled FROM scope_features WHERE scope_chat_id = ? AND feature = ?",
+            (str(scope_chat_id), feature),
+        ).fetchone()
+        return bool(row["enabled"]) if row else default
+
+
+def setFeature(scope_chat_id, feature, enabled):
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO scope_features (scope_chat_id, feature, enabled) VALUES (?, ?, ?)"
+            " ON CONFLICT(scope_chat_id, feature) DO UPDATE SET enabled = excluded.enabled",
+            (str(scope_chat_id), feature, 1 if enabled else 0),
+        )
+
+
+def getFeatures(scope_chat_id):
+    """Explicitly-set feature overrides for a scope, as {feature: enabled}.
+    A feature absent from this dict has no override -- callers should fall
+    back to that feature's own default, not treat it as disabled."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT feature, enabled FROM scope_features WHERE scope_chat_id = ?",
+            (str(scope_chat_id),),
+        ).fetchall()
+        return {r["feature"]: bool(r["enabled"]) for r in rows}
 
 
 def rotateInviteCode(chat_id):

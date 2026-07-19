@@ -262,6 +262,7 @@ async def members(request):
     return web.json_response({
         "inviteCode": scope["invite_code"],
         "joinPolicy": scope["join_policy"],
+        "allowGroupRequests": db.isFeatureEnabled(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, default=False),
         "members": [
             {"userId": m["user_id"], "username": m["username"], "role": m["role"], "status": m["status"]}
             for m in rows
@@ -348,6 +349,11 @@ async def update_scope(request):
         if join_policy not in ("auto", "approval"):
             raise web.HTTPBadRequest(text="bad_join_policy")
         db.setJoinPolicy(scope["chat_id"], join_policy)
+    allow_group_requests = body.get("allowGroupRequests")
+    if allow_group_requests is not None:
+        if not isinstance(allow_group_requests, bool):
+            raise web.HTTPBadRequest(text="bad_allow_group_requests")
+        db.setFeature(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, allow_group_requests)
     return web.json_response({"ok": True})
 
 
