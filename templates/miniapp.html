@@ -58,6 +58,10 @@
     background: var(--card); color: var(--text); padding: 10px 16px; border-radius: 20px;
     font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
   .toast.show { opacity: 1; }
+  .side { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .role-select { background: var(--bg); color: var(--text); border: 1px solid rgba(128,128,128,.3);
+    border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .invite-code { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
 </style>
 </head>
 <body>
@@ -75,6 +79,24 @@
     <div id="queue"></div>
   </div>
 
+  <div class="panel" id="p-members">
+    <div class="card">
+      <div class="body">
+        <div class="t">Invite code</div>
+        <div class="invite-code" id="inviteCode">——</div>
+      </div>
+      <div class="side">
+        <button class="req-btn" id="copyInvite">Copy</button>
+        <button class="req-btn" id="regenInvite">New code</button>
+      </div>
+    </div>
+    <div class="seg" id="policySeg">
+      <button data-policy="approval" class="active">Approval</button>
+      <button data-policy="auto">Auto-join</button>
+    </div>
+    <div id="members"></div>
+  </div>
+
   <div class="panel" id="p-browse">
     <div class="seg">
       <button data-type="movie" class="active">🎬 Movies</button>
@@ -89,6 +111,7 @@
   <nav class="tabs">
     <button data-tab="requests" class="active"><span class="ico">📥</span>Requests</button>
     <button data-tab="queue" id="tab-queue" style="display:none"><span class="ico">⬇️</span>Queue</button>
+    <button data-tab="members" id="tab-members" style="display:none"><span class="ico">⚙️</span>Members</button>
     <button data-tab="browse"><span class="ico">🔍</span>Browse</button>
   </nav>
 
@@ -151,6 +174,105 @@ async function loadQueue() {
   } catch (e) { box.innerHTML = `<div class="empty">Couldn't load the queue.</div>`; }
 }
 
+function confirmDialog(msg) {
+  return new Promise(resolve => {
+    if (tg.showConfirm) tg.showConfirm(msg, resolve);
+    else resolve(confirm(msg));
+  });
+}
+
+async function loadMembers() {
+  const box = el("members"); box.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const data = await api("/api/members");
+    el("inviteCode").textContent = data.inviteCode;
+    document.querySelectorAll("#policySeg button").forEach(b => b.classList.toggle("active", b.dataset.policy === data.joinPolicy));
+    if (!data.members.length) { box.innerHTML = `<div class="empty">No members yet.</div>`; return; }
+    box.innerHTML = data.members.map(memberRowHtml).join("");
+    box.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.approve, "approve")));
+    box.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.deny, "deny")));
+    box.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeMember(b.dataset.remove)));
+    box.querySelectorAll("[data-role-select]").forEach(s => s.addEventListener("change", () => changeRole(s.dataset.roleSelect, s.value)));
+  } catch (e) { box.innerHTML = `<div class="empty">Couldn't load members.</div>`; }
+}
+
+function memberRowHtml(m) {
+  const name = H(m.username || m.userId);
+  if (m.status === "pending") {
+    return `<div class="card">
+      <div class="body"><div class="t">${name}</div><div class="m">pending</div></div>
+      <div class="side">
+        <button class="req-btn" data-approve="${H(m.userId)}">✅ Approve</button>
+        <button class="req-btn" data-deny="${H(m.userId)}">🚫 Deny</button>
+      </div>
+    </div>`;
+  }
+  if (m.status !== "approved") {
+    return `<div class="card"><div class="body"><div class="t">${name}</div><div class="m">${H(m.status)}</div></div></div>`;
+  }
+  const roleOpt = r => `<option value="${r}"${m.role === r ? " selected" : ""}>${r}</option>`;
+  return `<div class="card">
+    <div class="body"><div class="t">${name}</div><div class="m">${H(m.role)}</div></div>
+    <div class="side">
+      <select class="role-select" data-role-select="${H(m.userId)}">
+        ${roleOpt("member")}${roleOpt("editor")}${roleOpt("admin")}
+      </select>
+      <button class="req-btn" data-remove="${H(m.userId)}">Remove</button>
+    </div>
+  </div>`;
+}
+
+async function memberAction(userId, action) {
+  try {
+    await api(`/api/members/${userId}/${action}`, { method: "POST" });
+    toast(action === "approve" ? "Approved" : "Denied");
+  } catch (e) { toast("Couldn't update member"); }
+  loadMembers();
+}
+
+async function changeRole(userId, role) {
+  try {
+    const res = await api(`/api/members/${userId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }),
+    });
+    toast(res.ok ? "Role updated" : (res.error === "last_admin" ? "Can't remove the last admin" : "Couldn't update role"));
+  } catch (e) { toast("Couldn't update role"); }
+  loadMembers();
+}
+
+async function removeMember(userId) {
+  if (!await confirmDialog("Remove this member?")) return;
+  try {
+    const res = await api(`/api/members/${userId}`, { method: "DELETE" });
+    toast(res.ok ? "Removed" : (res.error === "last_admin" ? "Can't remove the last admin" : "Couldn't remove"));
+  } catch (e) { toast("Couldn't remove"); }
+  loadMembers();
+}
+
+document.querySelectorAll("#policySeg button").forEach(b => b.addEventListener("click", async () => {
+  document.querySelectorAll("#policySeg button").forEach(x => x.classList.toggle("active", x === b));
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ joinPolicy: b.dataset.policy }),
+    });
+    toast("Join policy updated");
+  } catch (e) { toast("Couldn't update join policy"); }
+}));
+
+el("copyInvite").addEventListener("click", () => {
+  const code = el("inviteCode").textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast("Copied"), () => toast("Couldn't copy"));
+});
+
+el("regenInvite").addEventListener("click", async () => {
+  if (!await confirmDialog("Generate a new invite code? The old one will stop working.")) return;
+  try {
+    const res = await api("/api/invite/regenerate", { method: "POST" });
+    el("inviteCode").textContent = res.inviteCode;
+    toast("New invite code generated");
+  } catch (e) { toast("Couldn't regenerate code"); }
+});
+
 let browseType = "movie", searchTimer;
 async function doSearch() {
   const q = el("q").value.trim();
@@ -195,11 +317,12 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "p-" + tab));
   if (tab === "queue") loadQueue();
+  if (tab === "members") loadMembers();
 }));
 // Browse type toggle
-document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+document.querySelectorAll("#p-browse .seg button").forEach(b => b.addEventListener("click", () => {
   browseType = b.dataset.type;
-  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll("#p-browse .seg button").forEach(x => x.classList.toggle("active", x === b));
   doSearch();
 }));
 el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 350); });
@@ -211,6 +334,7 @@ el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer
     el("scopeTitle").textContent = data.scopeTitle;
     el("sub").textContent = `${data.displayName} · ${data.role}${data.linked ? "" : " · not linked"}`;
     if (data.canSeeQueue) el("tab-queue").style.display = "";
+    if (data.role === "admin") el("tab-members").style.display = "";
     renderRequests(data);
   } catch (e) {
     document.body.innerHTML = `<div class="empty">Couldn't load. ${H(String(e.message || e))}</div>`;

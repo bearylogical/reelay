@@ -80,6 +80,85 @@ def test_queue_editor_only():
     run_client(check)
 
 
+def test_members_admin_only():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "m", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    async def check(c):
+        r = await c.get("/api/members", headers={"X-Telegram-Init-Data": init_for(1, "m")})
+        assert r.status == 403  # plain member blocked
+        r = await c.get("/api/members", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and d["inviteCode"] and len(d["members"]) == 2
+    run_client(check)
+
+
+def test_members_approve_and_deny():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.upsertMembership("-100111", "3", "pending-user", status="pending")
+
+    async def check(c):
+        r = await c.post("/api/members/3/approve", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        assert db.getMembership("-100111", "3")["status"] == "approved"
+
+        db.upsertMembership("-100111", "4", "denyme", status="pending")
+        r = await c.post("/api/members/4/deny", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        assert db.getMembership("-100111", "4")["status"] == "denied"
+    run_client(check)
+
+
+def test_members_role_change_protects_last_admin():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    async def check(c):
+        r = await c.patch("/api/members/2", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"role": "member"})
+        d = await r.json()
+        assert r.status == 200 and d["ok"] is False and d["error"] == "last_admin"
+        assert db.getMembership("-100111", "2")["role"] == "admin"
+    run_client(check)
+
+
+def test_members_remove():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.upsertMembership("-100111", "3", "m", status="approved")
+    db.approveMembership("-100111", "3", approved_by="x")
+
+    async def check(c):
+        r = await c.delete("/api/members/3", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        assert db.getMembership("-100111", "3") is None
+    run_client(check)
+
+
+def test_invite_regenerate_and_join_policy():
+    scope = db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    async def check(c):
+        r = await c.post("/api/invite/regenerate", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and d["inviteCode"] != scope["invite_code"]
+
+        r = await c.patch("/api/scope", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"joinPolicy": "auto"})
+        assert r.status == 200
+        assert db.getScope("-100111")["join_policy"] == "auto"
+    run_client(check)
+
+
 def test_request_not_linked_returns_409():
     db.upsertScope("-100111", title="Fam")
     db.upsertMembership("-100111", "3", "c", status="approved")

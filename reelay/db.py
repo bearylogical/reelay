@@ -172,6 +172,21 @@ def setScopeActive(chat_id, is_active):
         )
 
 
+def setJoinPolicy(chat_id, join_policy):
+    with _connect() as conn:
+        conn.execute("UPDATE scopes SET join_policy = ? WHERE chat_id = ?", (join_policy, str(chat_id)))
+    return getScope(chat_id)
+
+
+def rotateInviteCode(chat_id):
+    with _connect() as conn:
+        code = generateInviteCode()
+        while conn.execute("SELECT 1 FROM scopes WHERE invite_code = ?", (code,)).fetchone():
+            code = generateInviteCode()
+        conn.execute("UPDATE scopes SET invite_code = ? WHERE chat_id = ?", (code, str(chat_id)))
+    return getScope(chat_id)
+
+
 def getActiveScopes():
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM scopes WHERE is_active = 1").fetchall()
@@ -257,6 +272,35 @@ def getMembershipsAwaitingReminderAnswer(user_id):
             (str(user_id),),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def getMemberships(scope_chat_id):
+    """All memberships (any status), pending first, for the admin roster view."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM memberships WHERE scope_chat_id = ?"
+            " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, requested_at",
+            (str(scope_chat_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def setMembershipRole(scope_chat_id, user_id, role):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE memberships SET role = ? WHERE scope_chat_id = ? AND user_id = ?",
+            (role, str(scope_chat_id), str(user_id)),
+        )
+    return getMembership(scope_chat_id, user_id)
+
+
+def removeMembership(scope_chat_id, user_id):
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM memberships WHERE scope_chat_id = ? AND user_id = ?",
+            (str(scope_chat_id), str(user_id)),
+        )
+        return cur.rowcount > 0
 
 
 def getApprovedAdmins(scope_chat_id):
