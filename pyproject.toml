@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reelay"
+version = "1.0.0"
+description = "Household media-request relay for Telegram — group-native Overseerr requests, a Mini App dashboard, watched-aware reminders, and a weekly what's-new digest."
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot[job-queue]>=20.0.0",
+    "pyyaml",
+    "requests",
+    "python-i18n",
+    "aiohttp",
+]
+
+[tool.setuptools]
+packages = ["reelay"]

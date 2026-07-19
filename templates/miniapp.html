@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Reelay</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #17212b);
+    --text: var(--tg-theme-text-color, #f5f5f5);
+    --hint: var(--tg-theme-hint-color, #7d8b99);
+    --card: var(--tg-theme-secondary-bg-color, #232e3c);
+    --btn: var(--tg-theme-button-color, #3390ec);
+    --btn-text: var(--tg-theme-button-text-color, #fff);
+    --link: var(--tg-theme-link-color, #6ab3f3);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 15px; padding-bottom: 72px;
+  }
+  header { padding: 14px 16px 8px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .sub { color: var(--hint); font-size: 13px; margin-top: 2px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 16px 4px; }
+  .chip { background: var(--card); border-radius: 14px; padding: 5px 10px; font-size: 12px; color: var(--hint); }
+  .chip b { color: var(--text); }
+  .tabs { display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-top: 1px solid rgba(128,128,128,.15); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--hint);
+    padding: 10px 0 12px; font-size: 12px; cursor: pointer; }
+  .tabs button.active { color: var(--btn); }
+  .tabs .ico { display: block; font-size: 19px; margin-bottom: 2px; }
+  .panel { display: none; padding: 8px 12px 12px; }
+  .panel.active { display: block; }
+  .card { background: var(--card); border-radius: 12px; padding: 12px; margin: 8px 0;
+    display: flex; gap: 12px; align-items: flex-start; }
+  .card img { width: 46px; height: 69px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; background: rgba(128,128,128,.2); }
+  .card .body { flex: 1; min-width: 0; }
+  .card .t { font-weight: 600; }
+  .card .m { color: var(--hint); font-size: 13px; margin-top: 3px; }
+  .badge { font-size: 12px; margin-top: 4px; }
+  .mine { color: var(--link); font-size: 11px; }
+  .req-btn { background: var(--btn); color: var(--btn-text); border: none; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .req-btn:disabled { opacity: .5; }
+  .progress { height: 6px; background: rgba(128,128,128,.25); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .progress > i { display: block; height: 100%; background: var(--btn); }
+  .search { display: flex; gap: 8px; padding: 4px 4px 8px; }
+  .search input { flex: 1; background: var(--card); border: none; border-radius: 10px;
+    padding: 10px 12px; color: var(--text); font-size: 15px; }
+  .seg { display: flex; background: var(--card); border-radius: 10px; overflow: hidden; margin: 4px 4px 6px; }
+  .seg button { flex: 1; background: none; border: none; color: var(--hint); padding: 8px; font-size: 13px; cursor: pointer; }
+  .seg button.active { background: var(--btn); color: var(--btn-text); }
+  .empty { color: var(--hint); text-align: center; padding: 32px 16px; }
+  .toast { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+    background: var(--card); color: var(--text); padding: 10px 16px; border-radius: 20px;
+    font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="scopeTitle">Reelay</h1>
+    <div class="sub" id="sub"></div>
+  </header>
+
+  <div class="panel active" id="p-requests">
+    <div class="chips" id="counts"></div>
+    <div id="requests"></div>
+  </div>
+
+  <div class="panel" id="p-queue">
+    <div id="queue"></div>
+  </div>
+
+  <div class="panel" id="p-browse">
+    <div class="seg">
+      <button data-type="movie" class="active">🎬 Movies</button>
+      <button data-type="tv">📺 Shows</button>
+    </div>
+    <div class="search">
+      <input id="q" placeholder="Search to request…" autocomplete="off">
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <nav class="tabs">
+    <button data-tab="requests" class="active"><span class="ico">📥</span>Requests</button>
+    <button data-tab="queue" id="tab-queue" style="display:none"><span class="ico">⬇️</span>Queue</button>
+    <button data-tab="browse"><span class="ico">🔍</span>Browse</button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+
+const H = s => (s == null ? "" : String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+const el = id => document.getElementById(id);
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({ "X-Telegram-Init-Data": tg.initData }, opts.headers || {});
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(await r.text().catch(() => r.status));
+  return r.json();
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = el("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+function icon(mt) { return mt === "tv" ? "📺" : "🎬"; }
+
+function renderRequests(data) {
+  const c = el("counts"); c.innerHTML = "";
+  const co = data.counts || {};
+  const chip = (label, v) => v != null ? `<span class="chip">${label} <b>${v}</b></span>` : "";
+  c.innerHTML = chip("Pending", co.pending) + chip("Processing", co.processing) + chip("Available", co.available);
+
+  const box = el("requests");
+  if (!data.overseerrEnabled) { box.innerHTML = `<div class="empty">Overseerr isn't configured.</div>`; return; }
+  if (!data.requests.length) { box.innerHTML = `<div class="empty">No requests yet.</div>`; return; }
+  box.innerHTML = data.requests.map(r => `
+    <div class="card">
+      <div class="body">
+        <div class="t">${icon(r.mediaType)} ${H(r.title)}</div>
+        <div class="badge">${H(r.statusLabel)}</div>
+        ${r.mine ? `<div class="mine">requested by you</div>` : ``}
+      </div>
+    </div>`).join("");
+}
+
+async function loadQueue() {
+  const box = el("queue"); box.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const items = await api("/api/queue");
+    if (!items.length) { box.innerHTML = `<div class="empty">Nothing downloading.</div>`; return; }
+    box.innerHTML = items.map(q => `
+      <div class="card">
+        <div class="body">
+          <div class="t">${icon(q.mediaType)} ${H(q.title)}</div>
+          <div class="m">${q.progress}% · ${H(q.timeleft) || H(q.status)}</div>
+          <div class="progress"><i style="width:${q.progress}%"></i></div>
+        </div>
+      </div>`).join("");
+  } catch (e) { box.innerHTML = `<div class="empty">Couldn't load the queue.</div>`; }
+}
+
+let browseType = "movie", searchTimer;
+async function doSearch() {
+  const q = el("q").value.trim();
+  const box = el("results");
+  if (!q) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="empty">Searching…</div>`;
+  try {
+    const items = await api(`/api/catalog?type=${browseType}&q=${encodeURIComponent(q)}`);
+    if (!items.length) { box.innerHTML = `<div class="empty">No matches.</div>`; return; }
+    box.innerHTML = items.map((m, i) => `
+      <div class="card">
+        ${m.poster ? `<img src="${H(m.poster)}" loading="lazy">` : `<img>`}
+        <div class="body">
+          <div class="t">${H(m.title)} ${m.year ? `<span class="m">(${H(m.year)})</span>` : ``}</div>
+          <div class="badge">${H(statusBadge(m.status))}</div>
+        </div>
+        <button class="req-btn" data-i="${i}">Request</button>
+      </div>`).join("");
+    box.querySelectorAll(".req-btn").forEach(b => b.addEventListener("click", () => request(items[+b.dataset.i], b)));
+  } catch (e) { box.innerHTML = `<div class="empty">Search failed.</div>`; }
+}
+
+function statusBadge(s) {
+  return ({2:"⏳ Requested",3:"⏳ Processing",4:"🟡 Partially available",5:"✅ Available"})[s] || "➕ Not requested";
+}
+
+async function request(item, btn) {
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const res = await api("/api/request", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaType: browseType, mediaId: item.id, title: item.title })
+    });
+    if (res.ok) { btn.textContent = "✅"; toast("Requested " + item.title); if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success"); }
+    else { btn.disabled = false; btn.textContent = "Request"; toast(res.error === "not_linked" ? "Link your account: /linkme" : "Couldn't request"); }
+  } catch (e) { btn.disabled = false; btn.textContent = "Request"; toast("Couldn't request"); }
+}
+
+// Tabs
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  const tab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "p-" + tab));
+  if (tab === "queue") loadQueue();
+}));
+// Browse type toggle
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  browseType = b.dataset.type;
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("active", x === b));
+  doSearch();
+}));
+el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 350); });
+
+// Boot
+(async () => {
+  try {
+    const data = await api("/api/bootstrap");
+    el("scopeTitle").textContent = data.scopeTitle;
+    el("sub").textContent = `${data.displayName} · ${data.role}${data.linked ? "" : " · not linked"}`;
+    if (data.canSeeQueue) el("tab-queue").style.display = "";
+    renderRequests(data);
+  } catch (e) {
+    document.body.innerHTML = `<div class="empty">Couldn't load. ${H(String(e.message || e))}</div>`;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# runtime / user data
+config.yaml
+reelay.db
+logs/
+*.log
+chatid.txt
+admin.txt
+allowlist.txt
+.env
+
+# envs / editors
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+*.code-workspace

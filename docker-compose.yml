@@ -1,0 +1,25 @@
+services:
+  reelay:
+    container_name: reelay
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./reelay.db:/app/reelay.db:rw       # `touch reelay.db` before first run so this mounts as a file
+      - ./logs:/app/logs:rw                  # optional
+      - ./chatid.txt:/app/chatid.txt:rw      # optional: legacy per-chat password auth
+
+  # The Mini App and the Overseerr webhook need a public HTTPS URL. This
+  # sidecar exposes the bot's port (default 8080) via a Cloudflare tunnel --
+  # no open inbound ports. Only needed if miniapp.enable or overseerr.webhookSecret is set.
+  #   1. Create a tunnel in the Cloudflare Zero Trust dashboard.
+  #   2. Add a public hostname (e.g. reelay.yourdomain.com) -> http://localhost:8080
+  #   3. Put the tunnel token in CLOUDFLARE_TUNNEL_TOKEN (e.g. a .env file next to this).
+  #   4. Set miniapp.url to https://reelay.yourdomain.com/miniapp/ in config.yaml.
+  cloudflared:
+    container_name: reelay-cloudflared
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
