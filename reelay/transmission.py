@@ -3,7 +3,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler
 
-from .commons import authentication, checkAllowed, checkId, guardCallbackOwner, stampCallbackOwner
+from .commons import requestChatAccess, checkAllowed, checkId, guardCallbackOwner, stampCallbackOwner
 from .config import config
 from .translations import i18n
 import logging
@@ -32,10 +32,8 @@ async def transmission(update, context):
         return ConversationHandler.END
 
     if not checkId(update):
-        await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Authorize")
-        )
-        return TSL_NORMAL
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
 
     if config["onlyAdmin"] and not checkAllowed(update, "admin"):
         await context.bot.send_message(
@@ -67,11 +65,8 @@ async def changeSpeedTransmission(update, context):
         return
 
     if not checkId(update):
-        if (
-            await authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
-    
+        return ConversationHandler.END
+
     choice = update.callback_query.data
     command = f"transmission-remote {config['host']}"
     if config["authentication"]:

@@ -103,3 +103,42 @@ def test_reminder_threshold_awaiting():
     assert db.getMembershipsAwaitingReminderAnswer("5") == []
 
 
+def test_chat_access_request_lifecycle():
+    assert db.isChatAuthorized("42") is False
+
+    assert db.requestChatAccess("42", "alice") is True  # fresh -> newly pending
+    assert db.requestChatAccess("42", "alice") is False  # repeat -> not newly pending
+    pending = db.getPendingChatAccessRequests()
+    assert [r["chat_id"] for r in pending] == ["42"]
+    assert db.isChatAuthorized("42") is False
+
+    db.approveChatAccess("42", approved_by="1")
+    assert db.isChatAuthorized("42") is True
+    assert db.getPendingChatAccessRequests() == []
+    assert db.getApprovedChatIds() == ["42"]
+
+    # requesting again once already approved is a defensive no-op
+    assert db.requestChatAccess("42", "alice") is False
+    assert db.isChatAuthorized("42") is True
+
+
+def test_chat_access_request_denied_then_reset_to_pending():
+    db.requestChatAccess("7", "bob")
+    db.denyChatAccess("7", denied_by="1")
+    assert db.isChatAuthorized("7") is False
+    assert db.getPendingChatAccessRequests() == []
+
+    assert db.requestChatAccess("7", "bob") is True  # denied -> pending again
+    assert [r["chat_id"] for r in db.getPendingChatAccessRequests()] == ["7"]
+
+
+def test_legacy_chatid_migration(tmp_path, monkeypatch):
+    chatidFile = tmp_path / "chatid.txt"
+    chatidFile.write_text("111 - alice\n222\n")
+    monkeypatch.setattr(db, "CHATID_PATH", str(chatidFile))
+
+    db.initDb()
+
+    assert db.isChatAuthorized("111") is True
+    assert db.isChatAuthorized("222") is True
+    assert set(db.getApprovedChatIds()) == {"111", "222"}

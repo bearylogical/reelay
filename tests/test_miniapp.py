@@ -10,6 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 import reelay.db as db
 import reelay.miniapp as miniapp
+from reelay.translations import i18n
 
 TOKEN = "testtoken"
 
@@ -157,6 +158,45 @@ def test_invite_regenerate_and_join_policy():
                           json={"joinPolicy": "auto"})
         assert r.status == 200
         assert db.getScope("-100111")["join_policy"] == "auto"
+    run_client(check)
+
+
+def test_chat_requests_admin_only():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "m", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.requestChatAccess("555", "randomer")
+
+    async def check(c):
+        r = await c.get("/api/chat-requests", headers={"X-Telegram-Init-Data": init_for(1, "m")})
+        assert r.status == 403  # plain member blocked
+        r = await c.get("/api/chat-requests", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and [x["chatId"] for x in d] == ["555"]
+        assert d[0]["displayName"] == "randomer"
+    run_client(check)
+
+
+def test_chat_requests_approve_and_deny():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.requestChatAccess("555", "randomer")
+    db.requestChatAccess("777", "other")
+
+    async def check(c):
+        bot = c.app["bot"]
+        r = await c.post("/api/chat-requests/555/approve", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        assert db.isChatAuthorized("555") is True
+        bot.send_message.assert_any_call(chat_id="555", text=i18n.t("reelay.Chatid added"))
+
+        r = await c.post("/api/chat-requests/777/deny", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        assert db.isChatAuthorized("777") is False
+        assert db.getPendingChatAccessRequests() == []
     run_client(check)
 
 

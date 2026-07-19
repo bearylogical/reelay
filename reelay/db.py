@@ -1,9 +1,10 @@
+import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from .definitions import DB_PATH
+from .definitions import CHATID_PATH, DB_PATH
 
 _INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # unambiguous, no 0/O/1/I/L
 
@@ -117,6 +118,20 @@ def initDb():
                 occurred_at             TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_media_events_time ON media_events(occurred_at);
+
+            -- Bot-wide (not per-scope) authorization for the legacy direct
+            -- Sonarr/Radarr/Transmission/Sabnzbd commands. Replaces the old
+            -- shared-password chatid.txt file with an admin-approved request,
+            -- reviewed from the Mini App.
+            CREATE TABLE IF NOT EXISTS chat_access_requests (
+                chat_id         TEXT PRIMARY KEY,
+                display_name    TEXT,
+                status          TEXT NOT NULL DEFAULT 'pending'
+                                    CHECK (status IN ('pending', 'approved', 'denied')),
+                requested_at    TEXT NOT NULL,
+                decided_at      TEXT,
+                decided_by      TEXT
+            );
             """
         )
         # seerr_email added after the fact -- reliable key for matching a
@@ -126,6 +141,27 @@ def initDb():
             conn.execute("ALTER TABLE seerr_links ADD COLUMN seerr_email TEXT")
         except sqlite3.OperationalError:
             pass
+
+    _migrateLegacyChatIds()
+
+
+def _migrateLegacyChatIds():
+    """One-time (idempotent) import of the old chatid.txt allowlist into
+    chat_access_requests, so upgrading doesn't strand existing deployments
+    without access. Safe to run on every startup -- INSERT OR IGNORE."""
+    if not os.path.exists(CHATID_PATH):
+        return
+    with open(CHATID_PATH, "r") as file:
+        chatIds = [line.strip("\n").split(" - ")[0] for line in file if line.strip("\n")]
+    if not chatIds:
+        return
+    with _connect() as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO chat_access_requests"
+            " (chat_id, display_name, status, requested_at, decided_at, decided_by)"
+            " VALUES (?, NULL, 'approved', ?, ?, 'legacy-migration')",
+            [(chatId, _now(), _now()) for chatId in chatIds],
+        )
 
 
 # --- scopes -----------------------------------------------------------------
@@ -500,3 +536,78 @@ def getRecentMediaEvents(days=7):
 def pruneMediaEvents(days=30):
     with _connect() as conn:
         conn.execute("DELETE FROM media_events WHERE occurred_at < datetime('now', ?)", (f"-{int(days)} days",))
+
+
+# --- chat_access_requests -------------------------------------------------------
+#
+# Bot-wide authorization for the legacy direct Sonarr/Radarr/Transmission/
+# Sabnzbd commands (replaces the old shared-password chatid.txt file). Not
+# scoped to a particular group -- reviewed by an admin of any active scope
+# from the Mini App.
+
+def requestChatAccess(chat_id, display_name=None):
+    """Ensure a pending request exists for chat_id. Returns True if this call
+    put it into (or freshly created) a pending state -- i.e. the caller should
+    notify admins. Returns False if it was already pending (repeat attempt,
+    don't re-notify) or already approved."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT status FROM chat_access_requests WHERE chat_id = ?", (str(chat_id),)
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO chat_access_requests (chat_id, display_name, status, requested_at)"
+                " VALUES (?, ?, 'pending', ?)",
+                (str(chat_id), display_name, _now()),
+            )
+            return True
+        if row["status"] == "denied":
+            conn.execute(
+                "UPDATE chat_access_requests SET display_name = ?, status = 'pending',"
+                " requested_at = ?, decided_at = NULL, decided_by = NULL WHERE chat_id = ?",
+                (display_name, _now(), str(chat_id)),
+            )
+            return True
+        return False
+
+
+def isChatAuthorized(chat_id):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT status FROM chat_access_requests WHERE chat_id = ?", (str(chat_id),)
+        ).fetchone()
+        return bool(row and row["status"] == "approved")
+
+
+def getPendingChatAccessRequests():
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM chat_access_requests WHERE status = 'pending' ORDER BY requested_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def approveChatAccess(chat_id, approved_by):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE chat_access_requests SET status = 'approved', decided_at = ?, decided_by = ?"
+            " WHERE chat_id = ?",
+            (_now(), str(approved_by), str(chat_id)),
+        )
+
+
+def denyChatAccess(chat_id, denied_by):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE chat_access_requests SET status = 'denied', decided_at = ?, decided_by = ?"
+            " WHERE chat_id = ?",
+            (_now(), str(denied_by), str(chat_id)),
+        )
+
+
+def getApprovedChatIds():
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT chat_id FROM chat_access_requests WHERE status = 'approved'"
+        ).fetchall()
+        return [r["chat_id"] for r in rows]

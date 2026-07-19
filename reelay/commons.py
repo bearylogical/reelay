@@ -2,10 +2,9 @@ import logging
 import math
 import os
 import time
-from telegram.ext import ConversationHandler
 from . import logger
 from .config import config
-from .definitions import ADMIN_PATH, CHATID_PATH, ALLOWLIST_PATH
+from .definitions import ADMIN_PATH, ALLOWLIST_PATH
 from .translations import i18n
 from . import db
 
@@ -51,87 +50,72 @@ def generateApiQuery(app, endpoint, parameters={}):
         logger.warn(f"Generate of APIQUERY failed: {e}.")
 
 
-# Check if Id is authenticated
+# Check if this chat is authorized for the legacy direct-command surface
+# (add/delete/list/transmission/sabnzbd). Backed by chat_access_requests --
+# see requestChatAccess() below for how a chat gets there.
 def checkId(update):
-    authorize = False
-    if not os.path.exists(CHATID_PATH):
-        return False
-    with open(CHATID_PATH, "r") as file:
-        firstChar = file.read(1)
-        if not firstChar:
-            return False
-        file.close()
-    with open(CHATID_PATH, "r") as file:
-        for line in file:
-            chatId = line.strip("\n").split(" - ")[0]
-            if chatId == str(update.effective_message.chat_id):
-                authorize = True
-        file.close()
-        if authorize:
-            return True
-        else:
-            return False
+    return db.isChatAuthorized(update.effective_message.chat_id)
 
 
-async def authentication(update, context):
-    if config.get("enableAllowlist") and not checkAllowed(update,"regular"):
+def _chatDisplayName(update):
+    chat = update.effective_chat
+    if chat.username:
+        return str(chat.username)
+    if chat.title:
+        return str(chat.title)
+    if chat.first_name or chat.last_name:
+        return " ".join(filter(None, [chat.first_name, chat.last_name]))
+    return None
+
+
+async def requestChatAccess(update, context):
+    """Called whenever an unauthorized chat hits a legacy-gated command (or
+    explicitly runs /auth). Puts the chat into a pending chat_access_requests
+    row and notifies scope admins to review it from the Mini App -- there's no
+    password anymore, so nothing is ever granted synchronously here."""
+    if config.get("enableAllowlist") and not checkAllowed(update, "regular"):
         #When using this mode, bot will remain silent if user is not in the allowlist.txt
         logger.info("Allowlist is enabled, but userID isn't added into 'allowlist.txt'. So bot stays silent")
-        return ConversationHandler.END
-        
+        return
+
     chatid = update.effective_message.chat_id
-    existing = ""
-    if os.path.exists(CHATID_PATH):
-        with open(CHATID_PATH, "r") as file:
-            existing = file.read()
-    if str(chatid) in existing and existing:
+    if db.isChatAuthorized(chatid):
         await context.bot.send_message(
-            chat_id=update.effective_message.chat_id,
+            chat_id=chatid,
             text=i18n.t("reelay.Chatid already allowed"),
         )
+        return
+
+    displayName = _chatDisplayName(update)
+    if db.requestChatAccess(chatid, displayName):
+        await _notifyAdminsOfChatAccessRequest(context, chatid, displayName)
+        await context.bot.send_message(
+            chat_id=chatid, text=i18n.t("reelay.ChatAccess.Requested"),
+        )
     else:
-        password = update.message.text
-        if("/auth " in password):
-            password = password.replace("/auth ", "")
-        if str(password) == str(config["telegram"]["password"]):
-            with open(CHATID_PATH, "a") as file:
-                file.write(await getChatName(context, chatid))
+        await context.bot.send_message(
+            chat_id=chatid, text=i18n.t("reelay.ChatAccess.StillPending"),
+        )
+
+
+async def _notifyAdminsOfChatAccessRequest(context, chat_id, display_name):
+    """DM every approved admin of every active scope (deduped) that a new
+    chat wants access -- they review/approve it from the Mini App's Members
+    tab, not from this DM."""
+    notified = set()
+    for scope in db.getActiveScopes():
+        for admin in db.getApprovedAdmins(scope["chat_id"]):
+            userId = admin["user_id"]
+            if userId in notified:
+                continue
+            notified.add(userId)
+            try:
                 await context.bot.send_message(
-                    chat_id=update.effective_message.chat_id,
-                    text=i18n.t("reelay.Chatid added"),
+                    chat_id=userId,
+                    text=i18n.t("reelay.ChatAccess.AdminNotify", name=display_name or chat_id, chat_id=chat_id),
                 )
-                file.close()
-                return "added"
-        else:
-            logger.warning(
-                f"Failed authentication attempt by [{update.message.from_user.username}]. Password entered: [{password}]"
-            )
-            await context.bot.send_message(
-                chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Wrong password")
-            )
-            return ConversationHandler.END # This only stops the auth conv, so it goes back to choosing screen
-
-
-async def getChatName(context, chatid):
-    chat = await context.bot.get_chat(chatid)
-    if chat.username:
-        chatName = str(chat.username)
-    elif chat.title:
-        chatName = str(chat.title)
-    elif chat.last_name and chat.first_name:
-        chatName = str(chat.last_name) + str(chat.first_name)
-    elif chat.first_name:
-        chatName = str(chat.first_name)
-    elif chat.last_name:
-        chatName = str(chat.last_name)
-    else:
-        chatName = None
-
-    if chatName is not None:
-        chatAuth = str(chatid) + " - " + str(chatName) + "\n"
-    else:
-        chatAuth = str(chatid) + "\n"
-    return chatAuth
+            except Exception:
+                logger.warning(f"Could not DM admin {userId} about a pending chat access request.")
 
 
 # Check if user is an admin or an allowed user
@@ -213,14 +197,7 @@ def format_long_list_message(list):
 
 
 def getAuthChats():
-    chats = []
-    if not os.path.exists(CHATID_PATH):
-        return chats
-    with open(CHATID_PATH, "r") as file:
-        for line in file:
-            chats.append(line.strip("\n"))
-        file.close()
-    return chats
+    return db.getApprovedChatIds()
 
 
 # --- Group-mode: inline keyboard owner-locking -------------------------------

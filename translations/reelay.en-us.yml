@@ -6,7 +6,7 @@ en-us:
   MovieWithArticle: The movie
   Series: Series
   SeriesWithArticle: The series
-  Start chatting: Start chatting with Reelay in Telegram. The first time you use "start" you will be asked to enter your password.
+  Start chatting: Start chatting with Reelay in Telegram. The first time you use "start" this chat will need an admin's approval.
   End: The adding/deleting of movies or series has ended.
   Title: "Enter the title:"
   What is this?: Is this a movie or a series?
@@ -23,8 +23,6 @@ en-us:
   Season: Season
   Select all seasons: Select all seasons
   Deselect all seasons: Deselect all seasons
-  Authorize: You first need to authorize this chat. What is the password?
-  Wrong password: You entered the wrong password. Try again...
   Chatid added: "This chat is successfully added to the list of allowed chats. Now you can start using this bot. \nIf you entered a command, you need to execute it again."
   NotAdmin: "You need to be an admin to execute this command."
   Chatid already allowed: "This chat is already authorized."
@@ -42,6 +40,12 @@ en-us:
   Wrong values: "The following configkeys has a wrong value in your config.yaml-file: %{wrongValues}.
     \nChange these before restarting the bot."
   NotYourRequest: "This isn't your request 🙂"
+
+  ChatAccess:
+    Requested: "This chat isn't authorized yet. I've let an admin know — you'll be able to use this once it's approved from the Mini App."
+    StillPending: "Still waiting on an admin to approve this chat from the Mini App."
+    AdminNotify: "🔐 %{name} (chat %{chat_id}) wants access to Reelay. Review it in the Mini App's Members tab."
+    Denied: "This chat's access request was denied."
 
   GroupMode:
     Activated: "✅ %{name} is now an Reelay admin for this group. Invite code: %{code}. Members can join from a DM with /join %{code}."

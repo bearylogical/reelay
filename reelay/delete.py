@@ -5,7 +5,7 @@ from telegram.ext import ConversationHandler
 import logging
 from . import logger
 
-from .commons import authentication, checkAllowed, checkId, guardCallbackOwner, stampCallbackOwner
+from .commons import requestChatAccess, checkAllowed, checkId, guardCallbackOwner, stampCallbackOwner
 from .config import config
 from .translations import i18n
 from .conversation import getService, clearUserData, stop
@@ -35,11 +35,9 @@ async def delete(update : Update, context):
         return ConversationHandler.END
 
     if not checkId(update):
-        await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Authorize")
-        )
-        return SERIE_MOVIE_DELETE
-    
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
+
     if update.message is not None:
         reply = update.message.text.lower()
     elif update.callback_query is not None:
@@ -72,10 +70,7 @@ async def choiceDeleteSerieMovie(update, context):
         )
         return ConversationHandler.END
     if not checkId(update):
-        if (
-            authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
+        return ConversationHandler.END
     elif update.message.text.lower() == "/stop".lower() or update.message.text.lower() == "stop".lower():
         return stop(update, context)
     else:

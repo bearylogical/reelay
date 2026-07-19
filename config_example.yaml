@@ -47,7 +47,6 @@ radarr:
 # Telegram Configuration
 telegram:
   token:
-  password:
 
 # Transmission Configuration
 transmission:

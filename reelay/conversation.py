@@ -12,7 +12,7 @@ from telegram.ext import ConversationHandler
 from . import logger
 from . import radarr
 from . import sonarr
-from .commons import checkId, checkAllowed, guardCallbackOwner, forgetCallbackOwner
+from .commons import checkId, checkAllowed, guardCallbackOwner, forgetCallbackOwner, requestChatAccess
 from .config import config
 from .translations import i18n
 
@@ -56,10 +56,8 @@ async def stop(update, context):
         logger.info("Allowlist is enabled, but userID isn't added into 'allowlist.txt'. So bot stays silent")
         return ConversationHandler.END
     if not checkId(update):
-        await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Authorize")
-        )
-        return SERIE_MOVIE_AUTHENTICATED
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
     if not checkAllowed(update, "admin") and config.get("adminNotifyId") is not None:
         adminNotifyId = config.get("adminNotifyId")
         await context.bot.send_message(

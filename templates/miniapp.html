@@ -91,6 +91,7 @@
   </div>
 
   <div class="panel" id="p-members">
+    <div id="chatRequests"></div>
     <div class="card">
       <div class="body">
         <div class="t">Invite code</div>
@@ -210,6 +211,38 @@ async function loadMembers() {
     box.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeMember(b.dataset.remove)));
     box.querySelectorAll("[data-role-select]").forEach(s => s.addEventListener("change", () => changeRole(s.dataset.roleSelect, s.value)));
   } catch (e) { box.innerHTML = `<div class="empty">Couldn't load members.</div>`; }
+  loadChatRequests();
+}
+
+async function loadChatRequests() {
+  const wrap = el("chatRequests");
+  try {
+    const reqs = await api("/api/chat-requests");
+    if (!reqs.length) { wrap.innerHTML = ""; return; }
+    wrap.innerHTML = `<div class="t" style="padding:4px 4px 2px">Chat access requests</div>`
+      + reqs.map(chatRequestRowHtml).join("");
+    wrap.querySelectorAll("[data-chat-approve]").forEach(b => b.addEventListener("click", () => chatRequestAction(b.dataset.chatApprove, "approve")));
+    wrap.querySelectorAll("[data-chat-deny]").forEach(b => b.addEventListener("click", () => chatRequestAction(b.dataset.chatDeny, "deny")));
+  } catch (e) { wrap.innerHTML = ""; }
+}
+
+function chatRequestRowHtml(r) {
+  const name = H(r.displayName || r.chatId);
+  return `<div class="card">
+    <div class="body"><div class="t">${name}</div><div class="m">chat ${H(r.chatId)}</div></div>
+    <div class="side">
+      <button class="req-btn" data-chat-approve="${H(r.chatId)}">✅ Approve</button>
+      <button class="req-btn" data-chat-deny="${H(r.chatId)}">🚫 Deny</button>
+    </div>
+  </div>`;
+}
+
+async function chatRequestAction(chatId, action) {
+  try {
+    await api(`/api/chat-requests/${chatId}/${action}`, { method: "POST" });
+    toast(action === "approve" ? "Approved" : "Denied");
+  } catch (e) { toast("Couldn't update request"); }
+  loadChatRequests();
 }
 
 function memberRowHtml(m) {

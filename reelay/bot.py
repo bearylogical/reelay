@@ -14,7 +14,7 @@ from telegram.ext import (CallbackQueryHandler, ChatMemberHandler, CommandHandle
                           Application)
 from telegram.warnings import PTBUserWarning
 
-from .commons import (checkAllowed, checkId, authentication, format_bytes, getAuthChats,
+from .commons import (checkAllowed, checkId, requestChatAccess, format_bytes, getAuthChats,
                       guardCallbackOwner, stampCallbackOwner, forgetCallbackOwner, resolveScope)
 from .conversation import (SERIE_MOVIE_AUTHENTICATED, READ_CHOICE, GIVE_OPTION, GIVE_PATHS, TSL_NORMAL, GIVE_QUALITY_PROFILES, SELECT_SEASONS, SERIE_MOVIE_DELETE, READ_DELETE_CHOICE, stop, getService, clearUserData)
 from . import db
@@ -322,15 +322,14 @@ def main():
     # Bare-word (no-slash) entrypoint matches are a private-chat convenience
     # only -- in a group, ordinary conversation can accidentally contain
     # these keywords (e.g. someone just saying "delete" or "auth"), which
-    # would otherwise fire the handler on every member's behalf and, for
-    # /auth specifically, publicly broadcast a "wrong password" reply. The
-    # explicit /command form is unambiguous and stays enabled everywhere.
-    auth_handler_command = CommandHandler(config["entrypointAuth"], authentication)
+    # would otherwise fire the handler on every member's behalf. The explicit
+    # /command form is unambiguous and stays enabled everywhere.
+    auth_handler_command = CommandHandler(config["entrypointAuth"], requestChatAccess)
     auth_handler_text = MessageHandler(
                             filters.ChatType.PRIVATE & filters.Regex(
                                 re.compile(r"^" + config["entrypointAuth"] + "$", re.IGNORECASE)
                             ),
-                            authentication,
+                            requestChatAccess,
                         )
     allSeries_handler_command = CommandHandler(config["entrypointAllSeries"], listing.allSeries)
     allSeries_handler_text = MessageHandler(
@@ -573,10 +572,8 @@ async def startSerieMovie(update : Update, context):
         return ConversationHandler.END
     
     if not checkId(update):
-        await context.bot.send_message(
-            chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Authorize")
-        )
-        return SERIE_MOVIE_AUTHENTICATED
+        await requestChatAccess(update, context)
+        return ConversationHandler.END
 
     if update.message is not None:
         reply = update.message.text.lower()
@@ -617,10 +614,7 @@ async def startSerieMovie(update : Update, context):
 
 async def choiceSerieMovie(update, context):
     if not checkId(update):
-        if (
-            await authentication(update, context) == "added"
-        ):  # To also stop the beginning command
-            return ConversationHandler.END
+        return ConversationHandler.END
     elif update.message.text.lower() == "/stop".lower() or update.message.text.lower() == "stop".lower():
         return await stop(update, context)
     else:
