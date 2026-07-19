@@ -20,7 +20,6 @@ from aiohttp import web
 from . import channels
 from . import db
 from . import logger
-from . import onboarding
 from . import overseerr
 from . import plex
 from . import radarr
@@ -133,7 +132,6 @@ async def bootstrap(request):
         "seerrUsername": link["seerr_username"] if link else None,
         "overseerrEnabled": overseerr.enabled(),
         "canSeeQueue": role in ("editor", "admin"),
-        "isAdmin": role == "admin",
         "counts": counts,
         "requests": reqs,
     })
@@ -245,84 +243,119 @@ async def plex_poll(request):
 
 # --- Admin: member management --------------------------------------------------
 
-def _requireAdmin(membership):
+def _require_admin(membership):
     if membership["role"] != "admin":
         raise web.HTTPForbidden(text="admin required")
 
 
-async def admin_members(request):
-    user_id, scope, membership, tg_user = _authed(request)
-    _requireAdmin(membership)
+async def _notify(request, telegram_user_id, text):
+    try:
+        await request.app["bot"].send_message(chat_id=telegram_user_id, text=text)
+    except Exception:
+        logger.warning(f"Could not DM {telegram_user_id} about a membership change.")
 
-    pending = [
-        {"userId": m["user_id"], "username": m["username"] or m["user_id"], "requestedAt": m["requested_at"]}
-        for m in db.getPendingMemberships(scope["chat_id"])
-    ]
-    members = []
-    for m in db.getApprovedMembers(scope["chat_id"]):
-        link = db.getSeerrLink(scope["chat_id"], m["user_id"])
-        members.append({
-            "userId": m["user_id"],
-            "username": m["username"] or m["user_id"],
-            "role": m["role"],
-            "linked": bool(link),
-            "seerrUsername": link["seerr_username"] if link else None,
-        })
 
+async def members(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    rows = db.getMemberships(scope["chat_id"])
     return web.json_response({
-        "invite": {"code": scope["invite_code"], "joinPolicy": scope["join_policy"]},
-        "pending": pending,
-        "members": members,
+        "inviteCode": scope["invite_code"],
+        "joinPolicy": scope["join_policy"],
+        "members": [
+            {"userId": m["user_id"], "username": m["username"], "role": m["role"], "status": m["status"]}
+            for m in rows
+        ],
     })
 
 
-async def admin_approve(request):
-    user_id, scope, membership, tg_user = _authed(request)
-    _requireAdmin(membership)
-    target_user_id = request.match_info["user_id"]
-
-    target = db.getMembership(scope["chat_id"], target_user_id)
-    if not target:
-        return web.json_response({"ok": False, "error": "not_found"}, status=404)
-
-    db.approveMembership(scope["chat_id"], target_user_id, approved_by=user_id)
-    display_name = target.get("username") or target_user_id
-
-    # Parity with the chat-approval flow: DM the newly approved member the
-    # reminder-threshold question and the Overseerr/Plex picker.
-    shim = types.SimpleNamespace(bot=request.app["bot"])
-    await onboarding.askReminderThresholdFor(shim, target_user_id)
-    await onboarding.sendSeerrPicker(shim, user_id, scope["chat_id"], target_user_id, display_name)
+async def approve_member(request):
+    user_id, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["user_id"]
+    target_membership = db.getMembership(scope["chat_id"], target)
+    if not target_membership:
+        raise web.HTTPNotFound(text="no such member")
+    db.approveMembership(scope["chat_id"], target, approved_by=user_id)
+    await _notify(request, target, i18n.t("reelay.Onboarding.JoinApproved", title=scope.get("title") or scope["chat_id"]))
     return web.json_response({"ok": True})
 
 
-async def admin_deny(request):
-    user_id, scope, membership, tg_user = _authed(request)
-    _requireAdmin(membership)
-    target_user_id = request.match_info["user_id"]
-    db.denyMembership(scope["chat_id"], target_user_id)
+async def deny_member(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["user_id"]
+    target_membership = db.getMembership(scope["chat_id"], target)
+    if not target_membership:
+        raise web.HTTPNotFound(text="no such member")
+    db.denyMembership(scope["chat_id"], target)
+    display = target_membership.get("username") or target
+    await _notify(request, target, i18n.t("reelay.Onboarding.Denied", name=display))
     return web.json_response({"ok": True})
 
 
-async def admin_set_role(request):
-    user_id, scope, membership, tg_user = _authed(request)
-    _requireAdmin(membership)
-    target_user_id = request.match_info["user_id"]
-
+async def update_member_role(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["user_id"]
+    target_membership = db.getMembership(scope["chat_id"], target)
+    if not target_membership or target_membership["status"] != "approved":
+        raise web.HTTPNotFound(text="no such member")
     try:
         body = await request.json()
         role = body["role"]
     except Exception:
-        return web.json_response({"ok": False, "error": "bad_request"}, status=400)
+        raise web.HTTPBadRequest(text="bad_request")
     if role not in ("member", "editor", "admin"):
-        return web.json_response({"ok": False, "error": "bad_role"}, status=400)
-
-    if str(target_user_id) == str(user_id) and role != "admin" \
+        raise web.HTTPBadRequest(text="bad_role")
+    if target_membership["role"] == "admin" and role != "admin" \
             and len(db.getApprovedAdmins(scope["chat_id"])) <= 1:
-        return web.json_response({"ok": False, "error": "last_admin"}, status=400)
-
-    db.setMembershipRole(scope["chat_id"], target_user_id, role)
+        return web.json_response({"ok": False, "error": "last_admin"})
+    db.setMembershipRole(scope["chat_id"], target, role)
+    if role != target_membership["role"]:
+        display = target_membership.get("username") or target
+        await _notify(request, target, i18n.t(
+            "reelay.Onboarding.RoleChanged", title=scope.get("title") or scope["chat_id"], role=role,
+        ))
     return web.json_response({"ok": True})
+
+
+async def remove_member(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    target = request.match_info["user_id"]
+    target_membership = db.getMembership(scope["chat_id"], target)
+    if not target_membership:
+        raise web.HTTPNotFound(text="no such member")
+    if target_membership["role"] == "admin" and target_membership["status"] == "approved" \
+            and len(db.getApprovedAdmins(scope["chat_id"])) <= 1:
+        return web.json_response({"ok": False, "error": "last_admin"})
+    db.removeMembership(scope["chat_id"], target)
+    if target_membership["status"] == "approved":
+        await _notify(request, target, i18n.t("reelay.Onboarding.Removed", title=scope.get("title") or scope["chat_id"]))
+    return web.json_response({"ok": True})
+
+
+async def update_scope(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    join_policy = body.get("joinPolicy")
+    if join_policy is not None:
+        if join_policy not in ("auto", "approval"):
+            raise web.HTTPBadRequest(text="bad_join_policy")
+        db.setJoinPolicy(scope["chat_id"], join_policy)
+    return web.json_response({"ok": True})
+
+
+async def regenerate_invite(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    updated = db.rotateInviteCode(scope["chat_id"])
+    return web.json_response({"inviteCode": updated["invite_code"]})
 
 
 def build_app(bot):
@@ -336,10 +369,13 @@ def build_app(bot):
     app.router.add_post("/api/request", submit_request)
     app.router.add_post("/api/plex/start", plex_start)
     app.router.add_get("/api/plex/poll", plex_poll)
-    app.router.add_get("/api/admin/members", admin_members)
-    app.router.add_post("/api/admin/members/{user_id}/approve", admin_approve)
-    app.router.add_post("/api/admin/members/{user_id}/deny", admin_deny)
-    app.router.add_post("/api/admin/members/{user_id}/role", admin_set_role)
+    app.router.add_get("/api/members", members)
+    app.router.add_post("/api/members/{user_id}/approve", approve_member)
+    app.router.add_post("/api/members/{user_id}/deny", deny_member)
+    app.router.add_patch("/api/members/{user_id}", update_member_role)
+    app.router.add_delete("/api/members/{user_id}", remove_member)
+    app.router.add_patch("/api/scope", update_scope)
+    app.router.add_post("/api/invite/regenerate", regenerate_invite)
     # Overseerr status events -> the scope's #updates topic.
     app.router.add_post("/overseerr/webhook/{secret}", webhooks.handle_overseerr)
     return app

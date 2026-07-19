@@ -78,6 +78,15 @@ en-us:
     LinkSkipped: "No problem — you can link later with /linkme."
     LinkDone: "🔗 Linked to %{account}."
     LinkNoOverseerr: "Overseerr isn't configured, so there's nothing to link to."
+    RoleChanged: "Your role in %{title} is now %{role}."
+    Removed: "You've been removed from %{title}."
+    RequestLinkPrompt: "Who should I ask to link their Plex/Overseerr account in %{title}?"
+    RequestLinkAllButton: "🔔 Ask everyone (%{count})"
+    RequestLinkNoneUnlinked: "Everyone in %{title} already has their Plex account linked. 🎉"
+    RequestLinkSent: "🔔 Asked %{name} to link their Plex account."
+    RequestLinkSentAll: "🔔 Asked %{count} member(s) to link their Plex account."
+    RequestLinkFailed: "Couldn't message %{name} — they may need to start a chat with me first."
+    LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account so I can attribute your requests and track what you've watched."
 
   messages:
     Add: Yes, add this %{subject}

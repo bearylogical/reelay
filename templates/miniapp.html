@@ -58,22 +58,17 @@
     background: var(--card); color: var(--text); padding: 10px 16px; border-radius: 20px;
     font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
   .toast.show { opacity: 1; }
+  .side { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .role-select { background: var(--bg); color: var(--text); border: 1px solid rgba(128,128,128,.3);
+    border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .invite-code { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
   .section-title { font-size: 12px; color: var(--hint); text-transform: uppercase;
     letter-spacing: .04em; margin: 16px 4px 6px; }
   .section-title:first-child { margin-top: 4px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .row .name { font-weight: 600; }
-  .row .m { color: var(--hint); font-size: 13px; margin-top: 2px; }
   .btn { background: var(--btn); color: var(--btn-text); border: none; border-radius: 8px;
     padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .btn.secondary { background: rgba(128,128,128,.25); color: var(--text); }
   .btn:disabled { opacity: .5; }
-  .btn-row { display: flex; gap: 8px; }
-  .role-select { background: rgba(128,128,128,.2); color: var(--text); border: none;
-    border-radius: 8px; padding: 6px 8px; font-size: 13px; }
-  .invite-code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 18px;
-    letter-spacing: .06em; background: rgba(128,128,128,.15); border-radius: 8px;
-    padding: 8px 12px; display: inline-block; }
   .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(128,128,128,.3);
     border-top-color: var(--btn); display: inline-block; vertical-align: -3px; margin-right: 6px;
     animation: spin 0.8s linear infinite; }
@@ -95,6 +90,24 @@
     <div id="queue"></div>
   </div>
 
+  <div class="panel" id="p-members">
+    <div class="card">
+      <div class="body">
+        <div class="t">Invite code</div>
+        <div class="invite-code" id="inviteCode">——</div>
+      </div>
+      <div class="side">
+        <button class="req-btn" id="copyInvite">Copy</button>
+        <button class="req-btn" id="regenInvite">New code</button>
+      </div>
+    </div>
+    <div class="seg" id="policySeg">
+      <button data-policy="approval" class="active">Approval</button>
+      <button data-policy="auto">Auto-join</button>
+    </div>
+    <div id="members"></div>
+  </div>
+
   <div class="panel" id="p-browse">
     <div class="seg">
       <button data-type="movie" class="active">🎬 Movies</button>
@@ -110,16 +123,12 @@
     <div id="account"></div>
   </div>
 
-  <div class="panel" id="p-admin">
-    <div id="admin"></div>
-  </div>
-
   <nav class="tabs">
     <button data-tab="requests" class="active"><span class="ico">📥</span>Requests</button>
     <button data-tab="queue" id="tab-queue" style="display:none"><span class="ico">⬇️</span>Queue</button>
+    <button data-tab="members" id="tab-members" style="display:none"><span class="ico">⚙️</span>Members</button>
     <button data-tab="browse"><span class="ico">🔍</span>Browse</button>
     <button data-tab="account"><span class="ico">👤</span>Account</button>
-    <button data-tab="admin" id="tab-admin" style="display:none"><span class="ico">🛠️</span>Admin</button>
   </nav>
 
   <div class="toast" id="toast"></div>
@@ -180,6 +189,105 @@ async function loadQueue() {
       </div>`).join("");
   } catch (e) { box.innerHTML = `<div class="empty">Couldn't load the queue.</div>`; }
 }
+
+function confirmDialog(msg) {
+  return new Promise(resolve => {
+    if (tg.showConfirm) tg.showConfirm(msg, resolve);
+    else resolve(confirm(msg));
+  });
+}
+
+async function loadMembers() {
+  const box = el("members"); box.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const data = await api("/api/members");
+    el("inviteCode").textContent = data.inviteCode;
+    document.querySelectorAll("#policySeg button").forEach(b => b.classList.toggle("active", b.dataset.policy === data.joinPolicy));
+    if (!data.members.length) { box.innerHTML = `<div class="empty">No members yet.</div>`; return; }
+    box.innerHTML = data.members.map(memberRowHtml).join("");
+    box.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.approve, "approve")));
+    box.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.deny, "deny")));
+    box.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeMember(b.dataset.remove)));
+    box.querySelectorAll("[data-role-select]").forEach(s => s.addEventListener("change", () => changeRole(s.dataset.roleSelect, s.value)));
+  } catch (e) { box.innerHTML = `<div class="empty">Couldn't load members.</div>`; }
+}
+
+function memberRowHtml(m) {
+  const name = H(m.username || m.userId);
+  if (m.status === "pending") {
+    return `<div class="card">
+      <div class="body"><div class="t">${name}</div><div class="m">pending</div></div>
+      <div class="side">
+        <button class="req-btn" data-approve="${H(m.userId)}">✅ Approve</button>
+        <button class="req-btn" data-deny="${H(m.userId)}">🚫 Deny</button>
+      </div>
+    </div>`;
+  }
+  if (m.status !== "approved") {
+    return `<div class="card"><div class="body"><div class="t">${name}</div><div class="m">${H(m.status)}</div></div></div>`;
+  }
+  const roleOpt = r => `<option value="${r}"${m.role === r ? " selected" : ""}>${r}</option>`;
+  return `<div class="card">
+    <div class="body"><div class="t">${name}</div><div class="m">${H(m.role)}</div></div>
+    <div class="side">
+      <select class="role-select" data-role-select="${H(m.userId)}">
+        ${roleOpt("member")}${roleOpt("editor")}${roleOpt("admin")}
+      </select>
+      <button class="req-btn" data-remove="${H(m.userId)}">Remove</button>
+    </div>
+  </div>`;
+}
+
+async function memberAction(userId, action) {
+  try {
+    await api(`/api/members/${userId}/${action}`, { method: "POST" });
+    toast(action === "approve" ? "Approved" : "Denied");
+  } catch (e) { toast("Couldn't update member"); }
+  loadMembers();
+}
+
+async function changeRole(userId, role) {
+  try {
+    const res = await api(`/api/members/${userId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }),
+    });
+    toast(res.ok ? "Role updated" : (res.error === "last_admin" ? "Can't remove the last admin" : "Couldn't update role"));
+  } catch (e) { toast("Couldn't update role"); }
+  loadMembers();
+}
+
+async function removeMember(userId) {
+  if (!await confirmDialog("Remove this member?")) return;
+  try {
+    const res = await api(`/api/members/${userId}`, { method: "DELETE" });
+    toast(res.ok ? "Removed" : (res.error === "last_admin" ? "Can't remove the last admin" : "Couldn't remove"));
+  } catch (e) { toast("Couldn't remove"); }
+  loadMembers();
+}
+
+document.querySelectorAll("#policySeg button").forEach(b => b.addEventListener("click", async () => {
+  document.querySelectorAll("#policySeg button").forEach(x => x.classList.toggle("active", x === b));
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ joinPolicy: b.dataset.policy }),
+    });
+    toast("Join policy updated");
+  } catch (e) { toast("Couldn't update join policy"); }
+}));
+
+el("copyInvite").addEventListener("click", () => {
+  const code = el("inviteCode").textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast("Copied"), () => toast("Couldn't copy"));
+});
+
+el("regenInvite").addEventListener("click", async () => {
+  if (!await confirmDialog("Generate a new invite code? The old one will stop working.")) return;
+  try {
+    const res = await api("/api/invite/regenerate", { method: "POST" });
+    el("inviteCode").textContent = res.inviteCode;
+    toast("New invite code generated");
+  } catch (e) { toast("Couldn't regenerate code"); }
+});
 
 let browseType = "movie", searchTimer;
 async function doSearch() {
@@ -302,103 +410,18 @@ async function pollPlexLink(manual) {
   }
 }
 
-// --- Admin: member management -----------------------------------------------
-
-async function loadAdmin() {
-  const box = el("admin");
-  box.innerHTML = `<div class="empty">Loading…</div>`;
-  try {
-    const data = await api("/api/admin/members");
-    renderAdmin(data);
-  } catch (e) {
-    box.innerHTML = `<div class="empty">Couldn't load admin panel.</div>`;
-  }
-}
-
-function renderAdmin(data) {
-  const box = el("admin");
-  let html = `
-    <div class="section-title">Invite</div>
-    <div class="card"><div class="body">
-      <div class="invite-code">${H(data.invite.code)}</div>
-      <div class="m" style="margin-top:6px">Have them DM the bot: <b>/join ${H(data.invite.code)}</b></div>
-      <div class="btn-row" style="margin-top:10px">
-        <button class="btn secondary" id="invite-copy">Copy code</button>
-        <button class="btn secondary" id="invite-share">Share</button>
-      </div>
-    </div></div>`;
-
-  html += `<div class="section-title">Pending requests</div>`;
-  html += data.pending.length ? data.pending.map(p => `
-    <div class="card row">
-      <div class="body"><div class="name">${H(p.username)}</div></div>
-      <div class="btn-row">
-        <button class="btn" data-approve="${H(p.userId)}">Approve</button>
-        <button class="btn secondary" data-deny="${H(p.userId)}">Deny</button>
-      </div>
-    </div>`).join("") : `<div class="empty">No pending requests.</div>`;
-
-  html += `<div class="section-title">Members</div>`;
-  html += data.members.map(m => `
-    <div class="card row">
-      <div class="body">
-        <div class="name">${H(m.username)}</div>
-        <div class="m">${m.linked ? "✅ " + H(m.seerrUsername || "linked") : "Not linked"}</div>
-      </div>
-      <select class="role-select" data-role="${H(m.userId)}">
-        ${["member", "editor", "admin"].map(r => `<option value="${r}"${r === m.role ? " selected" : ""}>${r}</option>`).join("")}
-      </select>
-    </div>`).join("");
-
-  box.innerHTML = html;
-
-  el("invite-copy").addEventListener("click", () => {
-    if (navigator.clipboard) navigator.clipboard.writeText(data.invite.code);
-    toast("Invite code copied");
-  });
-  el("invite-share").addEventListener("click", () => {
-    const msg = `Join our Reelay household: DM the bot /join ${data.invite.code}`;
-    if (tg.openTelegramLink) tg.openTelegramLink("https://t.me/share/url?url=&text=" + encodeURIComponent(msg));
-  });
-  box.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => adminAction(b.dataset.approve, "approve")));
-  box.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => adminAction(b.dataset.deny, "deny")));
-  box.querySelectorAll(".role-select").forEach(s => s.addEventListener("change", () => setRole(s.dataset.role, s.value)));
-}
-
-async function adminAction(userId, action) {
-  try {
-    await api(`/api/admin/members/${userId}/${action}`, { method: "POST" });
-    toast(action === "approve" ? "Approved" : "Denied");
-    loadAdmin();
-  } catch (e) { toast("Couldn't update"); }
-}
-
-async function setRole(userId, role) {
-  try {
-    await api(`/api/admin/members/${userId}/role`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role })
-    });
-    toast("Role updated");
-  } catch (e) {
-    let msg = "Couldn't update role";
-    try { if (JSON.parse(e.message).error === "last_admin") msg = "Can't remove the last admin"; } catch (_) {}
-    toast(msg);
-    loadAdmin();
-  }
-}
-
 // Tabs
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
   const tab = b.dataset.tab;
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "p-" + tab));
   if (tab === "queue") loadQueue();
-  if (tab === "admin") loadAdmin();
+  if (tab === "members") loadMembers();
 }));
 // Browse type toggle
-document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+document.querySelectorAll("#p-browse .seg button").forEach(b => b.addEventListener("click", () => {
   browseType = b.dataset.type;
-  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll("#p-browse .seg button").forEach(x => x.classList.toggle("active", x === b));
   doSearch();
 }));
 el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 350); });
@@ -410,7 +433,7 @@ el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer
     el("scopeTitle").textContent = data.scopeTitle;
     el("sub").textContent = `${data.displayName} · ${data.role}${data.linked ? "" : " · not linked"}`;
     if (data.canSeeQueue) el("tab-queue").style.display = "";
-    if (data.isAdmin) el("tab-admin").style.display = "";
+    if (data.role === "admin") el("tab-members").style.display = "";
     renderRequests(data);
     renderAccount(data);
   } catch (e) {

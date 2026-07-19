@@ -21,7 +21,9 @@ grew into a group-native, Overseerr-first bot with its own architecture.
 - **Group-native.** Add the bot to a Telegram forum supergroup; it auto-registers
   the group, and a Telegram admin claims it (`/claim`). Members join by DM
   (`/join <code>`), an admin approves, and onboarding links them to their
-  Overseerr/Plex account and asks their reminder preference.
+  Overseerr/Plex account and asks their reminder preference. Members can
+  (re-)link anytime with `/linkme`, and admins can nudge everyone who hasn't
+  linked yet with `/requestlink`.
 - **Per-scope roles.** `member` / `editor` / `admin` per group (replacing flat
   allowlist files). Requests, queue visibility, and admin actions are gated by role.
 - **Requests through Overseerr.** The add flow (chat or Mini App) submits to
@@ -99,7 +101,7 @@ run on python-telegram-bot's `JobQueue`.
 | `commons.py` | Auth, inline-keyboard owner-locking, scope resolution, API helpers |
 | `overseerr.py` | Overseerr/Jellyseerr client (search, request, users, watch data, counts) |
 | `radarr.py` / `sonarr.py` | Direct Sonarr/Radarr client (lookup, add, delete, queue) |
-| `onboarding.py` | `/join`, approvals, account linking, `/remindme` |
+| `onboarding.py` | `/join`, approvals, account linking, `/remindme`, `/requestlink` |
 | `channels.py` | Category → forum-topic routing |
 | `reminders`* | Watched-aware nudge job (in `bot.py`) |
 | `digest.py` | Weekly what's-new (group post + personal DMs) |
