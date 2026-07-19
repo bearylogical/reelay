@@ -161,6 +161,139 @@ def test_invite_regenerate_and_join_policy():
     run_client(check)
 
 
+def test_send_weekly_now_admin_only_and_marks_sent():
+    from datetime import datetime
+
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "m", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.setChannelRoute("-100111", "updates", "-100111", "70")
+
+    async def check(c):
+        # No events yet -> nothing to send.
+        r = await c.post("/api/weekly/send", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and d["ok"] is False and d["error"] == "nothing_this_week"
+
+        db.recordMediaEvent("The Matrix", "movie")
+
+        r = await c.post("/api/weekly/send", headers={"X-Telegram-Init-Data": init_for(1, "m")})
+        assert r.status == 403  # plain member blocked
+
+        r = await c.post("/api/weekly/send", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and d["ok"] is True
+        assert db.getScope("-100111")["weekly_digest_last_sent"] == datetime.now().date().isoformat()
+    run_client(check)
+
+
+def test_weekly_endpoint_returns_movie_tv_breakdown():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "m", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.recordMediaEvent("The Matrix", "movie")
+    db.recordMediaEvent("Severance", "tv")
+    db.recordMediaEvent("Severance", "tv")  # duplicate, deduped
+
+    async def check(c):
+        r = await c.get("/api/weekly", headers={"X-Telegram-Init-Data": init_for(1, "m")})
+        d = await r.json()
+        assert r.status == 200
+        assert d["counts"] == {"movie": 1, "tv": 1}
+        assert d["movies"] == ["The Matrix"] and d["tv"] == ["Severance"]
+    run_client(check)
+
+
+def test_weekly_endpoint_requires_auth():
+    async def check(c):
+        r = await c.get("/api/weekly")
+        assert r.status == 401
+    run_client(check)
+
+
+def test_update_scope_weekly_digest_fields():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    async def check(c):
+        r = await c.patch("/api/scope", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"weeklyDigestEnabled": True, "weeklyDigestDay": "friday", "weeklyDigestHour": 18})
+        assert r.status == 200
+        scope = db.getScope("-100111")
+        assert scope["weekly_digest_enabled"] == 1
+        assert scope["weekly_digest_day"] == "friday" and scope["weekly_digest_hour"] == 18
+
+        r = await c.get("/api/members", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert d["weeklyDigest"] == {"enabled": True, "day": "friday", "hour": 18}
+
+        r = await c.patch("/api/scope", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"weeklyDigestDay": "not-a-day"})
+        assert r.status == 400
+    run_client(check)
+
+
+def test_scope_export_import_roundtrip_admin_only():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "m", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.setJoinPolicy("-100111", "auto")
+    db.setFeature("-100111", db.FEATURE_GROUP_REQUESTS, True)
+    db.setChannelRoute("-100111", "updates", "-100111", "70")
+    db.setWeeklyDigestConfig("-100111", enabled=True, day="friday", hour=18)
+
+    async def check(c):
+        r = await c.get("/api/scope/export", headers={"X-Telegram-Init-Data": init_for(1, "m")})
+        assert r.status == 403  # plain member blocked
+
+        r = await c.get("/api/scope/export", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        assert r.status == 200
+        exported = await r.json()
+        assert exported["joinPolicy"] == "auto"
+        assert exported["features"] == {db.FEATURE_GROUP_REQUESTS: True}
+        assert exported["channelRoutes"] == [{"category": "updates", "destChatId": "-100111", "destThreadId": "70"}]
+        assert exported["weeklyDigest"] == {"enabled": True, "day": "friday", "hour": 18}
+
+        # Change everything, then restore from the export.
+        db.setJoinPolicy("-100111", "approval")
+        db.setFeature("-100111", db.FEATURE_GROUP_REQUESTS, False)
+        db.deleteChannelRoute("-100111", "updates")
+        db.setWeeklyDigestConfig("-100111", enabled=False, day="monday", hour=9)
+
+        r = await c.post("/api/scope/import", headers={"X-Telegram-Init-Data": init_for(1, "m")}, json=exported)
+        assert r.status == 403  # plain member blocked
+
+        r = await c.post("/api/scope/import", headers={"X-Telegram-Init-Data": init_for(2, "a")}, json=exported)
+        assert r.status == 200
+
+        scope = db.getScope("-100111")
+        assert scope["join_policy"] == "auto"
+        assert db.isFeatureEnabled("-100111", db.FEATURE_GROUP_REQUESTS) is True
+        assert db.getChannelRoute("-100111", "updates")["dest_thread_id"] == "70"
+        assert scope["weekly_digest_enabled"] == 1 and scope["weekly_digest_day"] == "friday"
+    run_client(check)
+
+
+def test_scope_import_rejects_bad_input():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    async def check(c):
+        r = await c.post("/api/scope/import", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"joinPolicy": "not-a-policy"})
+        assert r.status == 400
+        r = await c.post("/api/scope/import", headers={"X-Telegram-Init-Data": init_for(2, "a")},
+                          json={"channelRoutes": [{"category": "updates"}]})  # missing destChatId
+        assert r.status == 400
+    run_client(check)
+
+
 def test_chat_requests_admin_only():
     db.upsertScope("-100111", title="Fam")
     db.upsertMembership("-100111", "1", "m", status="approved")

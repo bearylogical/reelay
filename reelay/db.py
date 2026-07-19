@@ -11,6 +11,8 @@ _INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # unambiguous, no 0/O/1/I/
 # scope_features keys. Add new per-chat toggles here rather than a new column.
 FEATURE_GROUP_REQUESTS = "group_requests"  # allow add/start requests inside the group itself, vs. DM-only
 
+_VALID_WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -37,14 +39,18 @@ def initDb():
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS scopes (
-                chat_id             TEXT PRIMARY KEY,
-                message_thread_id   TEXT,
-                title               TEXT,
-                invite_code         TEXT UNIQUE NOT NULL,
-                join_policy         TEXT NOT NULL DEFAULT 'approval'
-                                        CHECK (join_policy IN ('auto', 'approval')),
-                is_active           INTEGER NOT NULL DEFAULT 1,
-                created_at          TEXT NOT NULL
+                chat_id                     TEXT PRIMARY KEY,
+                message_thread_id           TEXT,
+                title                       TEXT,
+                invite_code                 TEXT UNIQUE NOT NULL,
+                join_policy                 TEXT NOT NULL DEFAULT 'approval'
+                                                CHECK (join_policy IN ('auto', 'approval')),
+                is_active                   INTEGER NOT NULL DEFAULT 1,
+                created_at                  TEXT NOT NULL,
+                weekly_digest_enabled       INTEGER NOT NULL DEFAULT 0,
+                weekly_digest_day           TEXT NOT NULL DEFAULT 'monday',
+                weekly_digest_hour          INTEGER NOT NULL DEFAULT 9,
+                weekly_digest_last_sent     TEXT
             );
 
             CREATE TABLE IF NOT EXISTS memberships (
@@ -163,9 +169,30 @@ def initDb():
             conn.execute("ALTER TABLE memberships ADD COLUMN anonymize_requests INTEGER")
         except sqlite3.OperationalError:
             pass
+        # weekly_digest_* added after the fact -- idempotent for databases
+        # created by an earlier build (scopes CREATE TABLE above already has
+        # them for fresh installs). Column absence here is also the signal
+        # that _migrateLegacyWeeklyDigestConfig() below should seed values
+        # from the old global YAML config -- once these columns exist, an
+        # admin's per-scope choices (even ones matching the defaults) must
+        # never be silently overwritten again.
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(scopes)").fetchall()]
+        needs_weekly_digest_seed = "weekly_digest_enabled" not in cols
+        for stmt in (
+            "ALTER TABLE scopes ADD COLUMN weekly_digest_enabled INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE scopes ADD COLUMN weekly_digest_day TEXT NOT NULL DEFAULT 'monday'",
+            "ALTER TABLE scopes ADD COLUMN weekly_digest_hour INTEGER NOT NULL DEFAULT 9",
+            "ALTER TABLE scopes ADD COLUMN weekly_digest_last_sent TEXT",
+        ):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
 
     _migrateLegacyChatIds()
     _migrateLegacyAllowGroupRequests()
+    if needs_weekly_digest_seed:
+        _migrateLegacyWeeklyDigestConfig()
 
 
 def _migrateLegacyAllowGroupRequests():
@@ -187,6 +214,34 @@ def _migrateLegacyAllowGroupRequests():
             conn.execute("ALTER TABLE scopes DROP COLUMN allow_group_requests")
         except sqlite3.OperationalError:
             pass
+
+
+def _migrateLegacyWeeklyDigestConfig():
+    """One-time seed of the new per-scope weekly_digest_* columns from the old
+    global config.yaml weeklyDigest.enable/day/hour block, so upgrading
+    doesn't silently turn the digest off (or change its schedule) for
+    existing deployments. Only called once, right after the columns are
+    added (see initDb()) -- after that, per-scope values set via the Mini
+    App are the only source of truth."""
+    from .config import config
+
+    wd = config.get("weeklyDigest", {})
+    enabled = 1 if wd.get("enable") else 0
+    day = str(wd.get("day", "monday")).lower()
+    if day not in _VALID_WEEKDAYS:
+        day = "monday"
+    try:
+        hour = int(wd.get("hour", 9))
+    except (TypeError, ValueError):
+        hour = 9
+    if not 0 <= hour <= 23:
+        hour = 9
+
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE scopes SET weekly_digest_enabled = ?, weekly_digest_day = ?, weekly_digest_hour = ?",
+            (enabled, day, hour),
+        )
 
 
 def _migrateLegacyChatIds():
@@ -256,6 +311,58 @@ def setJoinPolicy(chat_id, join_policy):
     with _connect() as conn:
         conn.execute("UPDATE scopes SET join_policy = ? WHERE chat_id = ?", (join_policy, str(chat_id)))
     return getScope(chat_id)
+
+
+# --- weekly digest schedule (per-scope) ----------------------------------------
+
+def setWeeklyDigestConfig(chat_id, enabled=None, day=None, hour=None):
+    """Partial update of a scope's weekly digest settings. Pass only the
+    fields that changed; None leaves that column untouched. Raises ValueError
+    on an invalid day/hour so the Mini App can return a 400."""
+    if day is not None and day not in _VALID_WEEKDAYS:
+        raise ValueError(f"invalid day: {day!r}")
+    if hour is not None and not (isinstance(hour, int) and 0 <= hour <= 23):
+        raise ValueError(f"invalid hour: {hour!r}")
+
+    sets, params = [], []
+    if enabled is not None:
+        sets.append("weekly_digest_enabled = ?")
+        params.append(1 if enabled else 0)
+    if day is not None:
+        sets.append("weekly_digest_day = ?")
+        params.append(day)
+    if hour is not None:
+        sets.append("weekly_digest_hour = ?")
+        params.append(hour)
+    if not sets:
+        return getScope(chat_id)
+
+    params.append(str(chat_id))
+    with _connect() as conn:
+        conn.execute(f"UPDATE scopes SET {', '.join(sets)} WHERE chat_id = ?", params)
+    return getScope(chat_id)
+
+
+def markWeeklyDigestSent(chat_id, date_str):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE scopes SET weekly_digest_last_sent = ? WHERE chat_id = ?",
+            (date_str, str(chat_id)),
+        )
+
+
+def getScopesDueForWeeklyDigest(day_name, hour, today_str):
+    """Active scopes whose weekly digest is enabled, scheduled for this
+    day/hour, and haven't already been sent today (guards against firing
+    twice if the hourly tick overlaps its own window)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM scopes WHERE is_active = 1 AND weekly_digest_enabled = 1"
+            " AND weekly_digest_day = ? AND weekly_digest_hour = ?"
+            " AND (weekly_digest_last_sent IS NULL OR weekly_digest_last_sent != ?)",
+            (day_name, hour, today_str),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # --- scope_features (generic per-chat feature management) ---------------------

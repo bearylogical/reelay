@@ -14,11 +14,13 @@ import logging
 import time
 import types
 import urllib.parse
+from datetime import datetime
 
 from aiohttp import web
 
 from . import channels
 from . import db
+from . import digest
 from . import logger
 from . import overseerr
 from . import plex
@@ -147,6 +149,30 @@ async def queue(request):
     return web.json_response(items)
 
 
+async def weekly(request):
+    """This week's TV/movie breakdown (any approved member) -- same source
+    data as the scheduled group digest, see digest.weekly_breakdown()."""
+    _authed(request)
+    return web.json_response(digest.weekly_breakdown(db.getRecentMediaEvents(7)))
+
+
+async def send_weekly_now(request):
+    """Admin-triggered on-demand post of this week's digest to the scope's
+    #updates topic (and personal DMs) -- same content as the scheduled
+    weekly_digest_tick, without waiting for the configured day/hour. Marks
+    the scope as sent for today so the scheduled tick doesn't double-post
+    later the same day."""
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    events = db.getRecentMediaEvents(7)
+    if not events:
+        return web.json_response({"ok": False, "error": "nothing_this_week"})
+    shim = types.SimpleNamespace(bot=request.app["bot"])
+    await digest.send_weekly_digest_to_scope(shim, scope, events)
+    db.markWeeklyDigestSent(scope["chat_id"], datetime.now().date().isoformat())
+    return web.json_response({"ok": True})
+
+
 async def catalog(request):
     _authed(request)  # any approved member may browse
     q = request.query.get("q", "").strip()
@@ -267,6 +293,11 @@ async def members(request):
         "inviteCode": scope["invite_code"],
         "joinPolicy": scope["join_policy"],
         "allowGroupRequests": db.isFeatureEnabled(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, default=False),
+        "weeklyDigest": {
+            "enabled": bool(scope["weekly_digest_enabled"]),
+            "day": scope["weekly_digest_day"],
+            "hour": scope["weekly_digest_hour"],
+        },
         "members": [
             {"userId": m["user_id"], "username": m["username"], "role": m["role"], "status": m["status"]}
             for m in rows
@@ -358,6 +389,20 @@ async def update_scope(request):
         if not isinstance(allow_group_requests, bool):
             raise web.HTTPBadRequest(text="bad_allow_group_requests")
         db.setFeature(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, allow_group_requests)
+
+    weekly_enabled = body.get("weeklyDigestEnabled")
+    weekly_day = body.get("weeklyDigestDay")
+    weekly_hour = body.get("weeklyDigestHour")
+    if weekly_enabled is not None and not isinstance(weekly_enabled, bool):
+        raise web.HTTPBadRequest(text="bad_weekly_digest_enabled")
+    if weekly_hour is not None and not isinstance(weekly_hour, int):
+        raise web.HTTPBadRequest(text="bad_weekly_digest_hour")
+    if weekly_enabled is not None or weekly_day is not None or weekly_hour is not None:
+        try:
+            db.setWeeklyDigestConfig(scope["chat_id"], enabled=weekly_enabled, day=weekly_day, hour=weekly_hour)
+        except ValueError:
+            raise web.HTTPBadRequest(text="bad_weekly_digest_config")
+
     return web.json_response({"ok": True})
 
 
@@ -366,6 +411,82 @@ async def regenerate_invite(request):
     _require_admin(membership)
     updated = db.rotateInviteCode(scope["chat_id"])
     return web.json_response({"inviteCode": updated["invite_code"]})
+
+
+# --- Settings backup/restore ----------------------------------------------------
+#
+# Scoped strictly to this group's own Reelay settings (join policy, feature
+# toggles, channel routing, weekly digest schedule) -- never the bot-wide
+# config.yaml, which holds credentials (Telegram token, Sonarr/Radarr keys)
+# that must never be downloadable through the Mini App.
+
+async def export_scope(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    return web.json_response({
+        "joinPolicy": scope["join_policy"],
+        "features": db.getFeatures(scope["chat_id"]),
+        "channelRoutes": [
+            {"category": r["category"], "destChatId": r["dest_chat_id"], "destThreadId": r["dest_thread_id"]}
+            for r in db.getChannelRoutes(scope["chat_id"])
+        ],
+        "weeklyDigest": {
+            "enabled": bool(scope["weekly_digest_enabled"]),
+            "day": scope["weekly_digest_day"],
+            "hour": scope["weekly_digest_hour"],
+        },
+    })
+
+
+async def import_scope(request):
+    _, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    try:
+        body = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="bad_request")
+    if not isinstance(body, dict):
+        raise web.HTTPBadRequest(text="bad_request")
+
+    join_policy = body.get("joinPolicy")
+    if join_policy is not None and join_policy not in ("auto", "approval"):
+        raise web.HTTPBadRequest(text="bad_join_policy")
+
+    features = body.get("features")
+    if features is not None and not isinstance(features, dict):
+        raise web.HTTPBadRequest(text="bad_features")
+
+    routes = body.get("channelRoutes")
+    if routes is not None:
+        if not isinstance(routes, list):
+            raise web.HTTPBadRequest(text="bad_channel_routes")
+        for r in routes:
+            if not isinstance(r, dict) or not r.get("category") or not r.get("destChatId"):
+                raise web.HTTPBadRequest(text="bad_channel_routes")
+
+    wd = body.get("weeklyDigest")
+    if wd is not None and not isinstance(wd, dict):
+        raise web.HTTPBadRequest(text="bad_weekly_digest")
+
+    if join_policy is not None:
+        db.setJoinPolicy(scope["chat_id"], join_policy)
+    if features is not None:
+        for feature, value in features.items():
+            db.setFeature(scope["chat_id"], feature, bool(value))
+    if routes is not None:
+        for existing in db.getChannelRoutes(scope["chat_id"]):
+            db.deleteChannelRoute(scope["chat_id"], existing["category"])
+        for r in routes:
+            db.setChannelRoute(scope["chat_id"], r["category"], r["destChatId"], r.get("destThreadId"))
+    if wd is not None:
+        try:
+            db.setWeeklyDigestConfig(
+                scope["chat_id"], enabled=wd.get("enabled"), day=wd.get("day"), hour=wd.get("hour"),
+            )
+        except ValueError:
+            raise web.HTTPBadRequest(text="bad_weekly_digest")
+
+    return web.json_response({"ok": True})
 
 
 # --- Legacy chat access requests -----------------------------------------------
@@ -430,6 +551,8 @@ def build_app(bot):
     app.router.add_get("/miniapp", index)
     app.router.add_get("/api/bootstrap", bootstrap)
     app.router.add_get("/api/queue", queue)
+    app.router.add_get("/api/weekly", weekly)
+    app.router.add_post("/api/weekly/send", send_weekly_now)
     app.router.add_get("/api/catalog", catalog)
     app.router.add_post("/api/request", submit_request)
     app.router.add_post("/api/plex/start", plex_start)
@@ -440,6 +563,8 @@ def build_app(bot):
     app.router.add_patch("/api/members/{user_id}", update_member_role)
     app.router.add_delete("/api/members/{user_id}", remove_member)
     app.router.add_patch("/api/scope", update_scope)
+    app.router.add_get("/api/scope/export", export_scope)
+    app.router.add_post("/api/scope/import", import_scope)
     app.router.add_post("/api/invite/regenerate", regenerate_invite)
     app.router.add_get("/api/chat-requests", chat_requests)
     app.router.add_post("/api/chat-requests/{chat_id}/approve", approve_chat_request)
