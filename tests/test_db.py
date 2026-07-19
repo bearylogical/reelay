@@ -103,6 +103,17 @@ def test_reminder_threshold_awaiting():
     assert db.getMembershipsAwaitingReminderAnswer("5") == []
 
 
+def test_anonymize_requests_awaiting():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "5", "a", status="approved")
+    db.approveMembership("-100111", "5", approved_by="x")
+    assert len(db.getMembershipsAwaitingAnonymizeAnswer("5")) == 1
+    assert any(m["user_id"] == "5" for m in db.getApprovedMembersAwaitingAnonymizeAnswer())
+    db.setAnonymizeRequests("-100111", "5", True)
+    assert db.getMembershipsAwaitingAnonymizeAnswer("5") == []
+    assert db.getMembership("-100111", "5")["anonymize_requests"] == 1
+
+
 def test_chat_access_request_lifecycle():
     assert db.isChatAuthorized("42") is False
 
