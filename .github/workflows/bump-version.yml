@@ -1,0 +1,37 @@
+name: Bump Version
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version and push tag
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          tag_prefix: "v"
+
+      - name: Write VERSION files and commit
+        if: steps.tag.outputs.new_version != ''
+        run: |
+          echo "${{ steps.tag.outputs.new_version }}" > VERSION
+          echo "${{ steps.tag.outputs.new_version }}" > reelay/VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION reelay/VERSION
+          git diff --staged --quiet || (git commit -m "chore: bump version to ${{ steps.tag.outputs.new_version }} [skip ci]" && git push)

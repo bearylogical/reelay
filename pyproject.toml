@@ -15,5 +15,11 @@ dependencies = [
     "aiohttp",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.setuptools]
 packages = ["reelay"]
+
+[tool.setuptools.package-data]
+reelay = ["VERSION"]

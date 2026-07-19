@@ -34,7 +34,7 @@ from warnings import filterwarnings
 
 import asyncio
 
-__version__ = "0.8"
+from . import __version__
 
 # Set up logging
 logLevel = logging.DEBUG if config.get("debugLogging", False) else logging.INFO

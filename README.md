@@ -1,5 +1,10 @@
 # Reelay
 
+[![Tests](https://github.com/bearylogical/reelay/actions/workflows/test.yml/badge.svg)](https://github.com/bearylogical/reelay/actions/workflows/test.yml)
+[![Version](https://img.shields.io/github/v/tag/bearylogical/reelay?label=version&sort=semver)](https://github.com/bearylogical/reelay/tags)
+[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+
 **The household media-request relay for Telegram.** Reelay lets a group request
 movies and TV through [Overseerr](https://overseerr.dev/)/Jellyseerr, tracks
 those requests, nudges people to actually watch what they asked for, and posts a

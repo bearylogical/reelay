@@ -1,8 +1,19 @@
+import os
+import warnings
+
 import yaml
 
 from .definitions import CONFIG_PATH, CONFIG_EXAMPLE_PATH, DEFAULT_SETTINGS
 
-config = yaml.safe_load(open(CONFIG_PATH, encoding="utf8"))
+# Fall back to the example config when config.yaml is absent (fresh checkout,
+# CI, tests). The bot still needs a real token to actually connect.
+if os.path.exists(CONFIG_PATH):
+    _config_path = CONFIG_PATH
+else:
+    warnings.warn("config.yaml not found — falling back to config_example.yaml. Create config.yaml before running for real.")
+    _config_path = CONFIG_EXAMPLE_PATH
+
+config = yaml.safe_load(open(_config_path, encoding="utf8"))
 config_example = yaml.safe_load(open(CONFIG_EXAMPLE_PATH, encoding="utf8"))
 
 
