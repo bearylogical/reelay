@@ -106,6 +106,10 @@
       <button data-policy="approval" class="active">Approval</button>
       <button data-policy="auto">Auto-join</button>
     </div>
+    <div class="seg" id="groupReqSeg">
+      <button data-allow="false" class="active">Requests off in group</button>
+      <button data-allow="true">Requests on in group</button>
+    </div>
     <div id="members"></div>
     <div id="openChats"></div>
   </div>
@@ -205,6 +209,7 @@ async function loadMembers() {
     const data = await api("/api/members");
     el("inviteCode").textContent = data.inviteCode;
     document.querySelectorAll("#policySeg button").forEach(b => b.classList.toggle("active", b.dataset.policy === data.joinPolicy));
+    document.querySelectorAll("#groupReqSeg button").forEach(b => b.classList.toggle("active", (b.dataset.allow === "true") === data.allowGroupRequests));
     if (!data.members.length) { box.innerHTML = `<div class="empty">No members yet.</div>`; return; }
     box.innerHTML = data.members.map(memberRowHtml).join("");
     box.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => memberAction(b.dataset.approve, "approve")));
@@ -338,6 +343,16 @@ document.querySelectorAll("#policySeg button").forEach(b => b.addEventListener("
     });
     toast("Join policy updated");
   } catch (e) { toast("Couldn't update join policy"); }
+}));
+
+document.querySelectorAll("#groupReqSeg button").forEach(b => b.addEventListener("click", async () => {
+  document.querySelectorAll("#groupReqSeg button").forEach(x => x.classList.toggle("active", x === b));
+  try {
+    await api("/api/scope", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowGroupRequests: b.dataset.allow === "true" }),
+    });
+    toast("Group request setting updated");
+  } catch (e) { toast("Couldn't update group request setting"); }
 }));
 
 el("copyInvite").addEventListener("click", () => {

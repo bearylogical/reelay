@@ -171,3 +171,5 @@ en-us:
     AddFailed: Error when adding the %{subjectWithArticle} %{title} of the user %{first_name} with chat_id %{chat_id}.
     Exist: The %{subjectWithArticle} %{title} that the user %{first_name} with chat_id %{c.hat_id} wanted to add already exists.
     Delete: The user %{first_name} with chat_id %{chat_id} has initiated a new deletion.
+    RequestsDisabledInGroup: Requests are turned off in this group. Please message me directly instead.
+    RequestsDisabledButton: Message me privately

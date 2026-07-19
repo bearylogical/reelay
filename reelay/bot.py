@@ -566,6 +566,19 @@ async def startSerieMovie(update : Update, context):
     if not await guardCallbackOwner(update, context):
         return
 
+    if update.effective_chat.type in ("group", "supergroup"):
+        if not db.isFeatureEnabled(update.effective_chat.id, db.FEATURE_GROUP_REQUESTS, default=False):
+            keyboard = [[InlineKeyboardButton(
+                i18n.t("reelay.Notifications.RequestsDisabledButton"),
+                url=f"https://t.me/{context.bot.username}",
+            )]]
+            await context.bot.send_message(
+                chat_id=update.effective_message.chat_id,
+                text=i18n.t("reelay.Notifications.RequestsDisabledInGroup"),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+            return ConversationHandler.END
+
     if config.get("enableAllowlist") and not checkAllowed(update,"regular"):
         #When using this mode, bot will remain silent if user is not in the allowlist.txt
         logger.info("Allowlist is enabled, but userID isn't added into 'allowlist.txt'. So bot stays silent")
