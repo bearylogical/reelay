@@ -22,6 +22,21 @@ def test_search_filters_and_normalizes():
     assert [t["id"] for t in tv] == [101]
 
 
+def test_search_percent_encodes_query():
+    """Overseerr 400s on reserved characters, so a space must go out as %20
+    (requests' default "+" encoding is what broke multi-word titles)."""
+    captured = {}
+
+    def get(url, headers=None, timeout=None):
+        captured["url"] = url
+        return _resp({"results": []})
+
+    with patch("reelay.overseerr.requests.get", side_effect=get):
+        ov.search("the invite & co", "movie")
+    assert "query=the%20invite%20%26%20co" in captured["url"]
+    assert "+" not in captured["url"]
+
+
 def test_create_request_payload():
     captured = {}
 

@@ -1,6 +1,8 @@
 import logging
 import requests
 
+from urllib.parse import quote
+
 from . import logger
 from .config import config
 
@@ -162,17 +164,21 @@ def search(query, media_type):
     the current availability `status`. Empty list on failure or no matches."""
     if not enabled():
         return []
+    # Overseerr rejects a `query` containing reserved characters with a 400
+    # ("Parameter 'query' must be url encoded"). requests would encode a space
+    # as "+", which is reserved -- so every multi-word title failed. Build the
+    # query string ourselves so spaces come out as %20.
+    url = f"{_base()}/search?query={quote(query, safe='')}&page=1"
+    resp = None
     try:
-        resp = requests.get(
-            f"{_base()}/search",
-            headers=_headers(),
-            params={"query": query, "page": 1},
-            timeout=15,
-        )
+        resp = requests.get(url, headers=_headers(), timeout=15)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        logger.warning(f"Overseerr search failed for '{query}': {e}")
+        # Overseerr puts the actual reason in the body; without it a 400 here
+        # is indistinguishable from a 400 there.
+        body = f" -- {resp.text[:200]}" if resp is not None and resp.status_code >= 400 else ""
+        logger.warning(f"Overseerr search failed for '{query}': {e}{body}")
         return []
 
     results = []
