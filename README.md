@@ -36,7 +36,8 @@ grew into a group-native, Overseerr-first bot with its own architecture.
   `/requestlink`.
 - **Per-scope roles.** `member` / `editor` / `admin`, managed from the Mini
   App's **Members** tab (approve/deny joins, change roles, remove members,
-  regenerate the invite code) — replacing flat allowlist files. `editor`/
+  regenerate the invite code, run the connection self-test) — replacing flat
+  allowlist files. `editor`/
   `admin` see the live download queue; `admin` also manages members, roles,
   channel routing, and the invite code. The last remaining admin of a scope
   can't be demoted or removed.
@@ -54,6 +55,12 @@ grew into a group-native, Overseerr-first bot with its own architecture.
   **Browse** (search the catalog and request with one tap), and **Account**
   (self-service Plex linking). Auth is Telegram's signed `initData`,
   role-filtered server-side — no separate login.
+- **Connection self-test.** The Members tab's **Connections** card runs a
+  read-only check of the whole chain — Reelay → Radarr/Sonarr, Reelay →
+  Overseerr, Overseerr → Radarr/Sonarr (a live probe through Overseerr's own
+  API), plus whether each inbound webhook is configured and still delivering —
+  and reports one line per link instead of leaving you to read three services'
+  logs. See [Checking the connections](#checking-the-connections).
 - **Legacy chat-access requests.** A chat that isn't part of any scope yet and
   hits a gated command (or runs `/auth`) is queued as a pending chat-access
   request — no shared password anymore. Any scope admin reviews it from the
@@ -136,6 +143,29 @@ URL. The shipped `docker-compose.yml` includes a `cloudflared` sidecar:
    footer tallies them (`Reported by Overseerr 4 · Radarr 2`). The group post
    deliberately omits this — it's a diagnostic, not something `#updates` needs.
 
+### Checking the connections
+
+Members tab → **Connections** → **Run test**. Every check is a `GET`; nothing is
+created or changed, so it's safe to run whenever something looks wrong.
+
+| Row | What it proves |
+|---|---|
+| Radarr / Sonarr | Reelay can reach it, the API key is accepted, and it has root folders and quality profiles (both needed before an add can succeed) |
+| Overseerr | Reelay can reach it *and* `overseerr.apikey` is accepted — `/status` alone is public, so the test makes an authenticated call too |
+| Overseerr → Radarr / Sonarr | Overseerr can talk to its own Radarr/Sonarr **right now** — the check asks Overseerr to fetch that server's profiles and root folders, so a reply means the link works |
+| Radarr / Sonarr / Overseerr webhook | Whether a `webhookSecret` is set, and when that source last actually delivered an event (nothing outbound can test an inbound webhook) |
+
+Statuses are ✅ working, ⚠️ worth a look, ❌ broken, ⚪ not configured. Only ❌
+counts against the overall verdict — an unconfigured service is a choice, not a
+fault.
+
+One ⚠️ is worth explaining: *"Points at a different Radarr than Reelay does."*
+Hostnames can't settle this (Overseerr in Docker calls it `radarr:7878` for the
+box Reelay reaches at `192.168.1.5:7878`), so the test compares root folder
+paths instead — a property of the instance, not of the network. No overlap means
+the queue Reelay shows and the library Overseerr fills are probably two
+different servers.
+
 ---
 
 ## Local development
@@ -172,7 +202,8 @@ run on python-telegram-bot's `JobQueue`.
 | `reminders`* | Watched-aware nudge job (in `bot.py`) |
 | `digest.py` | Weekly what's-new (group post + personal DMs) |
 | `webhooks.py` | Overseerr/Radarr/Sonarr webhook receivers (record library events for the digest) |
-| `miniapp.py` | aiohttp server, initData auth; dashboard/queue/catalog/request API; admin API for members, roles, invite code, join policy, feature flags, and chat-access requests; Plex linking API |
+| `diagnostics.py` | Read-only connection self-test of the Overseerr → Radarr/Sonarr chain (Members tab → Connections) |
+| `miniapp.py` | aiohttp server, initData auth; dashboard/queue/catalog/request API; admin API for members, roles, invite code, join policy, feature flags, chat-access requests, and the connection self-test; Plex linking API |
 | `add.py`* / `delete.py` / `listing.py` / `transmission.py` / `sabnzbd.py` | Conversation flows |
 
 \* the add flow currently lives in `bot.py`.

@@ -780,6 +780,18 @@ def getRecentMediaEvents(days=7):
         return [dict(r) for r in rows]
 
 
+def getLastMediaEventBySource():
+    """{source: occurred_at} for the most recent event each source reported.
+    Rows older than pruneMediaEvents()'s window are gone, so a source that
+    stopped reporting eventually drops out entirely -- which is exactly the
+    signal the diagnostics self-test wants to show."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT source, MAX(occurred_at) AS last_at FROM media_events GROUP BY source"
+        ).fetchall()
+        return {r["source"]: r["last_at"] for r in rows}
+
+
 def pruneMediaEvents(days=30):
     with _connect() as conn:
         conn.execute("DELETE FROM media_events WHERE occurred_at < datetime('now', ?)", (f"-{int(days)} days",))

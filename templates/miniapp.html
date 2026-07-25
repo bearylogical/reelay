@@ -133,6 +133,18 @@
       </div>
     </div>
 
+    <div class="section-title">Connections</div>
+    <div class="card">
+      <div class="body">
+        <div class="t">Connection test</div>
+        <div class="m">Check that Overseerr, Radarr and Sonarr are reachable and wired to each other. Read-only.</div>
+      </div>
+      <div class="side">
+        <button class="req-btn" id="runDiagnostics">Run test</button>
+      </div>
+    </div>
+    <div id="diagnostics"></div>
+
     <div class="section-title">Backup</div>
     <div class="card">
       <div class="body">
@@ -488,6 +500,32 @@ el("sendWeeklyNow").addEventListener("click", async () => {
       : res.error === "not_delivered" ? "Nowhere to post — run /routehere updates in the group first"
       : "Nothing new to post this week");
   } catch (e) { toast("Couldn't post the update"); }
+  btn.disabled = false;
+});
+
+// Connection self-test. Never runs on tab load -- it calls out to three
+// external services, so it stays an explicit admin action.
+const DIAG_ICONS = { ok: "✅", warn: "⚠️", fail: "❌", skip: "⚪" };
+
+el("runDiagnostics").addEventListener("click", async () => {
+  const btn = el("runDiagnostics"), box = el("diagnostics");
+  btn.disabled = true;
+  box.innerHTML = `<div class="empty"><span class="spinner"></span>Testing connections…</div>`;
+  try {
+    const res = await api("/api/diagnostics");
+    box.innerHTML = res.checks.map(c => `
+      <div class="card">
+        <div class="body">
+          <div class="t">${DIAG_ICONS[c.status] || "•"} ${H(c.service)}</div>
+          <div class="m">${H(c.summary)}</div>
+          ${c.detail ? `<div class="m src">${H(c.detail)}</div>` : ``}
+        </div>
+      </div>`).join("");
+    toast(res.ok ? "All connections working" : "Something needs attention");
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(res.ok ? "success" : "warning");
+  } catch (e) {
+    box.innerHTML = `<div class="empty">Couldn't run the test.</div>`;
+  }
   btn.disabled = false;
 });
 

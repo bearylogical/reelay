@@ -7,6 +7,7 @@ login. All data is role-filtered server-side against the caller's per-scope
 membership; the client never receives anything it isn't allowed to see.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json as jsonlib
@@ -20,6 +21,7 @@ from aiohttp import web
 
 from . import channels
 from . import db
+from . import diagnostics
 from . import digest
 from . import logger
 from . import overseerr
@@ -433,6 +435,17 @@ async def update_scope(request):
     return web.json_response({"ok": True})
 
 
+async def run_diagnostics(request):
+    """Admin-triggered connectivity self-test of the Overseerr/Radarr/Sonarr
+    chain (see diagnostics.py). Read-only, but it makes up to seven outbound
+    calls with their own timeouts, so it runs off the bot's event loop rather
+    than stalling every other Telegram update behind a wedged service."""
+    user_id, scope, membership, _ = _authed(request)
+    _require_admin(membership)
+    logger.info(f"Scope {scope['chat_id']}: connection self-test run by {user_id}")
+    return web.json_response(await asyncio.to_thread(diagnostics.run))
+
+
 async def regenerate_invite(request):
     user_id, scope, membership, _ = _authed(request)
     _require_admin(membership)
@@ -603,6 +616,7 @@ def build_app(bot):
     app.router.add_get("/api/scope/export", export_scope)
     app.router.add_post("/api/scope/import", import_scope)
     app.router.add_post("/api/invite/regenerate", regenerate_invite)
+    app.router.add_get("/api/diagnostics", run_diagnostics)
     app.router.add_get("/api/chat-requests", chat_requests)
     app.router.add_post("/api/chat-requests/{chat_id}/approve", approve_chat_request)
     app.router.add_post("/api/chat-requests/{chat_id}/deny", deny_chat_request)

@@ -447,3 +447,26 @@ def test_plex_poll_rejects_other_users_pin():
     run_client(check)
 
 
+
+
+def test_diagnostics_admin_only():
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "1", "e", role="editor", status="approved")
+    db.approveMembership("-100111", "1", approved_by="x", role="editor")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+
+    report = {"ok": False, "checks": [
+        {"id": "radarr", "service": "Radarr", "status": "fail", "summary": "Unreachable", "detail": "boom"},
+    ]}
+
+    async def check(c):
+        with patch("reelay.diagnostics.run", return_value=report) as run:
+            r = await c.get("/api/diagnostics", headers={"X-Telegram-Init-Data": init_for(1, "e")})
+            assert r.status == 403  # editor blocked -- this reaches out to real services
+            assert run.call_count == 0
+
+            r = await c.get("/api/diagnostics", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+            d = await r.json()
+            assert r.status == 200 and d == report
+    run_client(check)
