@@ -196,8 +196,37 @@ def format_long_list_message(list):
         return stringParts
 
 
-def getAuthChats():
-    return db.getApprovedChatIds()
+def getAdminChatIds():
+    """Chat ids for operational warnings: the configured adminNotifyId, numeric
+    entries in admin.txt, and every approved scope admin.
+
+    Deliberately not every approved chat (db.getApprovedChatIds()), which is
+    what this used to broadcast to -- a misconfigured bot is the operator's
+    problem, and telling every authorized user is noise they can do nothing
+    about. Returns [] when no admin is identifiable, in which case the caller
+    should just log rather than fall back to telling everyone."""
+    admins = set()
+    notify = config.get("adminNotifyId")
+    if notify:
+        admins.add(str(notify))
+    if os.path.exists(ADMIN_PATH):
+        try:
+            with open(ADMIN_PATH, "r") as file:
+                for line in file:
+                    entry = line.strip().split(" - ")[0]
+                    if entry.isdigit():  # usernames aren't addressable by the API
+                        admins.add(entry)
+        except OSError as e:
+            logger.warning(f"Could not read {ADMIN_PATH}: {e}")
+    try:
+        for scope in db.getActiveScopes():
+            admins.update(str(m["user_id"]) for m in db.getApprovedMembers(scope["chat_id"])
+                          if m["role"] == "admin")
+    except Exception as e:
+        # startCheck() runs before initDb(), so on a fresh install the tables
+        # may not exist yet -- config and admin.txt still give us someone.
+        logger.debug(f"Could not read scope admins: {e}")
+    return sorted(admins)
 
 
 # --- Group-mode: inline keyboard owner-locking -------------------------------

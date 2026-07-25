@@ -29,12 +29,24 @@ def flatten_dict(dd, separator ='/', prefix =''):
              } if isinstance(dd, dict) else { prefix : dd }
 
 
+# Keys the bot reads defensively (config.get(...)) and whose absence simply
+# leaves a feature switched off. A config.yaml written before one of these
+# existed is not misconfigured, so they must never block startup or warn --
+# otherwise every new optional feature makes every existing install look broken.
+OPTIONAL_KEYS = {
+    "overseerr/webhookSecret",
+    "radarr/webhookSecret",
+    "sonarr/webhookSecret",
+}
+
+
 def checkConfig():
-    missingConfig=[]
-    for key_ex, value_ex in flatten_dict(config_example).items():
-        if key_ex not in flatten_dict(config):
-            missingConfig.append(key_ex)
-    return missingConfig
+    """Keys in the example that the user's config is missing, excluding the
+    optional ones. Add new optional keys to OPTIONAL_KEYS above, not just to
+    config_example.yaml."""
+    present = flatten_dict(config)
+    return [key for key in flatten_dict(config_example)
+            if key not in present and key not in OPTIONAL_KEYS]
 
 
 def checkConfigValues():
