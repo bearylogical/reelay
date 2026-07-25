@@ -2,6 +2,8 @@ import pytest
 
 import reelay.config as cfg
 import reelay.db as db
+import reelay.digest as digest
+import reelay.overseerr as overseerr
 
 
 @pytest.fixture(autouse=True)
@@ -16,5 +18,13 @@ def env(tmp_path, monkeypatch):
     cfg.config.setdefault("radarr", {})["webhookSecret"] = "r4d4rr"
     cfg.config.setdefault("sonarr", {})["webhookSecret"] = "s0n4rr"
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    # digest.collect_events() polls Overseerr, and overseerr.url points at a
+    # host that doesn't exist -- left alone, every digest test would spend its
+    # time failing a DNS lookup. Tests that care about the poll patch this with
+    # their own requests; everything else gets "Overseerr had nothing".
+    monkeypatch.setattr(overseerr, "getRequests", lambda *a, **kw: [])
+    # Module-level TTL cache: without this, one test's poll result leaks into
+    # the next (the DB is fresh per test, so this would be a confusing lie).
+    digest._poll_cache.update({"at": 0.0, "days": None, "events": []})
     db.initDb()
     yield
