@@ -14,8 +14,9 @@ from telegram.ext import (CallbackQueryHandler, ChatMemberHandler, CommandHandle
                           Application)
 from telegram.warnings import PTBUserWarning
 
-from .commons import (checkAllowed, checkId, requestChatAccess, format_bytes, getAuthChats,
-                      guardCallbackOwner, stampCallbackOwner, forgetCallbackOwner, resolveScope)
+from .commons import (checkAllowed, checkId, requestChatAccess, format_bytes,
+                      getAdminChatIds, guardCallbackOwner, stampCallbackOwner,
+                      forgetCallbackOwner, resolveScope)
 from .conversation import (SERIE_MOVIE_AUTHENTICATED, READ_CHOICE, GIVE_OPTION, GIVE_PATHS, TSL_NORMAL, GIVE_QUALITY_PROFILES, SELECT_SEASONS, SERIE_MOVIE_DELETE, READ_DELETE_CHOICE, stop, getService, clearUserData)
 from . import db
 from . import channels
@@ -43,6 +44,22 @@ logger.debug(f"Reelay v{__version__} starting up...")
 
 
 
+async def notifyAdmins(bot, text):
+    """Log a startup problem, then tell the admins -- never every authorized
+    chat. One unreachable admin must not stop the others being told, or take
+    the startup check down with it."""
+    logger.error(text)
+    admins = getAdminChatIds()
+    if not admins:
+        logger.error("No admin chat could be identified (set adminNotifyId in config.yaml) — logged only.")
+        return
+    for chat in admins:
+        try:
+            await bot.send_message(chat_id=int(chat), text=text)
+        except Exception as e:
+            logger.warning(f"Could not notify admin {chat}: {e}")
+
+
 async def startCheck():
     bot = telegram.Bot(token=config["telegram"]["token"])
     missingConfig = checkConfig()
@@ -50,14 +67,10 @@ async def startCheck():
     check=True
     if missingConfig: #empty list is False
         check = False
-        logger.error(i18n.t("reelay.Missing config", missingKeys=f"{missingConfig}"[1:-1]))
-        for chat in getAuthChats():
-            await bot.send_message(chat_id=chat, text=i18n.t("reelay.Missing config", missingKeys=f"{missingConfig}"[1:-1]))
+        await notifyAdmins(bot, i18n.t("reelay.Missing config", missingKeys=f"{missingConfig}"[1:-1]))
     if wrongValues:
         check=False
-        logger.error(i18n.t("reelay.Wrong values", wrongValues=f"{wrongValues}"[1:-1]))
-        for chat in getAuthChats():
-            await bot.send_message(chat_id=chat, text=i18n.t("reelay.Wrong values", wrongValues=f"{wrongValues}"[1:-1]))
+        await notifyAdmins(bot, i18n.t("reelay.Wrong values", wrongValues=f"{wrongValues}"[1:-1]))
     return check
 
 
