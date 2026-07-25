@@ -396,6 +396,33 @@ def test_request_not_linked_returns_409():
     run_client(check)
 
 
+def test_request_announces_with_the_poster_preview():
+    """The group post previews the poster, and the URL is resolved server-side
+    -- a client-supplied one would let any member post an arbitrary image."""
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "3", "c", status="approved")
+    db.approveMembership("-100111", "3", approved_by="x")
+    db.linkSeerr("-100111", "3", 33)
+    db.setChannelRoute("-100111", "requests", "-100111", "7")
+
+    async def check(c):
+        bot = c.app["bot"]
+        with patch("reelay.overseerr.createRequest", return_value={"id": 1}), \
+             patch("reelay.overseerr.getPosterUrl", return_value="https://image.tmdb.org/t/p/w500/dune.jpg") as poster:
+            r = await c.post("/api/request",
+                             headers={"X-Telegram-Init-Data": init_for(3, "c"), "Content-Type": "application/json"},
+                             data=json.dumps({"mediaType": "movie", "mediaId": 438631,
+                                              "title": "Dune", "poster": "https://evil.example/x.jpg"}))
+            assert r.status == 200 and (await r.json())["ok"] is True
+
+        poster.assert_called_once_with("movie", 438631)
+        kwargs = bot.send_message.call_args.kwargs
+        assert kwargs["link_preview_options"].url == "https://image.tmdb.org/t/p/w500/dune.jpg"
+        assert kwargs["text"] == i18n.t("reelay.Channels.RequestAnnounce", name="c", title="Dune")
+        assert kwargs["message_thread_id"] == 7
+    run_client(check)
+
+
 def test_plex_link_flow():
     db.upsertScope("-100111", title="Fam")
     db.upsertMembership("-100111", "9", "z", status="approved")

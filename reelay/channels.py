@@ -1,5 +1,6 @@
 import logging
 
+from telegram import LinkPreviewOptions
 from telegram.constants import ParseMode
 
 from . import db
@@ -100,12 +101,14 @@ async def unroute(update, context):
         await update.message.reply_text(i18n.t("reelay.Channels.NoSuchRoute", category=category))
 
 
-async def announce(context, scope_chat_id, category, text, from_chat_id=None, from_thread_id=None, parse_mode=ParseMode.MARKDOWN):
+async def announce(context, scope_chat_id, category, text, from_chat_id=None, from_thread_id=None, parse_mode=ParseMode.MARKDOWN, photo=None):
     """Post `text` into the channel configured for `category` in this scope.
     No-ops (returns False) when no route is set, or when the action already
     happened in the destination channel (avoids duplicate posts). Pass
     parse_mode=None for arbitrary text (e.g. media titles) that mustn't be
-    parsed as Markdown."""
+    parsed as Markdown. `photo` (a poster URL) attaches the image as the
+    message's link preview -- lighter in a busy topic than a photo card, and a
+    poster Telegram can't fetch just drops the preview rather than the post."""
     if scope_chat_id is None:
         return False
     route = db.getChannelRoute(scope_chat_id, category)
@@ -116,11 +119,17 @@ async def announce(context, scope_chat_id, category, text, from_chat_id=None, fr
     if from_chat_id is not None and str(from_chat_id) == route["dest_chat_id"] and from_thread == route["dest_thread_id"]:
         return False  # already in the destination topic; the inline reply covers it
 
-    kwargs = {"chat_id": int(route["dest_chat_id"]), "text": text, "parse_mode": parse_mode}
+    kwargs = {"chat_id": int(route["dest_chat_id"]), "parse_mode": parse_mode}
     if route["dest_thread_id"]:
         kwargs["message_thread_id"] = int(route["dest_thread_id"])
+
+    if photo:
+        kwargs["link_preview_options"] = LinkPreviewOptions(
+            url=photo, prefer_large_media=True, show_above_text=True
+        )
+
     try:
-        await context.bot.send_message(**kwargs)
+        await context.bot.send_message(text=text, **kwargs)
         return True
     except Exception:
         logger.warning(f"Could not announce '{category}' to route {route['dest_chat_id']}/{route['dest_thread_id']}.")

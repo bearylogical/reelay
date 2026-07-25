@@ -8,7 +8,8 @@ version = "1.0.0"
 description = "Household media-request relay for Telegram — group-native Overseerr requests, a Mini App dashboard, watched-aware reminders, and a weekly what's-new digest."
 requires-python = ">=3.11"
 dependencies = [
-    "python-telegram-bot[job-queue]>=20.0.0",
+    # >=20.8 for LinkPreviewOptions (Bot API 7.0), used to attach request posters.
+    "python-telegram-bot[job-queue]>=20.8",
     "pyyaml",
     "requests",
     "python-i18n",

@@ -203,6 +203,25 @@ def search(query, media_type):
     return results
 
 
+def getPosterUrl(media_type, tmdb_id):
+    """Poster URL for a tmdbId, from Overseerr's media detail endpoint. Used
+    where the poster wasn't carried along with the title (e.g. a Mini App
+    request, where trusting a client-supplied URL would let anyone post an
+    arbitrary image into the group). None when unavailable -- every caller
+    treats the poster as optional."""
+    if not enabled():
+        return None
+    endpoint = "tv" if media_type == "tv" else "movie"
+    try:
+        resp = requests.get(f"{_base()}/{endpoint}/{tmdb_id}", headers=_headers(), timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"Overseerr getPosterUrl failed for {endpoint}/{tmdb_id}: {e}")
+        return None
+    return _tmdbPoster(data.get("posterPath"))
+
+
 def displayName(user):
     """Overseerr computes displayName = username || plexUsername || email.
     Replicate that fallback here since the API doesn't always return it."""
