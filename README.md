@@ -81,7 +81,7 @@ grew into a group-native, Overseerr-first bot with its own architecture.
 
 ```bash
 git clone <this-repo> reelay && cd reelay
-cp config_example.yaml config.yaml   # fill in telegram.token at minimum
+make config-init                     # copies config_example.yaml -> config.yaml
 touch reelay.db                      # so the volume mounts as a file
 docker compose up -d reelay
 ```
@@ -89,6 +89,24 @@ docker compose up -d reelay
 Minimum config is a Telegram bot token (`telegram.token`) and your Sonarr/Radarr
 details. Overseerr, the Mini App, reminders, and the weekly digest are each
 opt-in blocks in `config.yaml`.
+
+### Keeping config.yaml current
+
+`config_example.yaml` is the schema of record, and new releases add keys to it.
+Reelay refuses to start if `config.yaml` is missing a required one, so check for
+that **before** you restart rather than after:
+
+```bash
+make config-check     # what your config.yaml is missing, and what would block startup
+make config-diff      # the exact lines a migration would add
+make config-migrate   # add them (backs config.yaml up first)
+```
+
+The migration edits the file as text: your values, ordering and comments are
+left exactly as they are, and each new key arrives with the example's comment
+explaining what it does. Keys you have that the example doesn't are reported and
+never touched. Optional keys (the `webhookSecret`s) are called out separately —
+missing ones don't block startup, they just leave that feature off.
 
 ### Enabling the Mini App / webhook (public HTTPS)
 
@@ -124,10 +142,12 @@ URL. The shipped `docker-compose.yml` includes a `cloudflared` sidecar:
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -e .
-cp config_example.yaml config.yaml   # fill in a token
-python -m reelay
+make install                         # pip install -e ".[test]"
+make config-init                     # fill in a token
+make run                             # config-check, then python -m reelay
 ```
+
+`make` on its own lists every target.
 
 ---
 

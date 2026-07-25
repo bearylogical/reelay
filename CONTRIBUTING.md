@@ -7,14 +7,14 @@ Thanks for your interest! Reelay is a single-process Python package
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[test]"
-cp config_example.yaml config.yaml   # fill in telegram.token
-python -m pytest        # run the test suite
-python -m reelay        # run the bot
+make install            # pip install -e ".[test]"
+make config-init        # config_example.yaml -> config.yaml, fill in telegram.token
+make test               # run the test suite
+make run                # run the bot
 ```
 
 Tests fall back to `config_example.yaml` automatically, so `pytest` works
-without a `config.yaml`.
+without a `config.yaml`. `make` with no target lists everything.
 
 ## Guidelines
 
@@ -27,7 +27,13 @@ without a `config.yaml`.
 - **User-facing strings** go through `i18n.t("reelay....")` and are defined in
   `translations/reelay.en-us.yml`.
 - **New config** belongs in both `config_example.yaml` and the
-  `DEFAULT_SETTINGS` dict in `reelay/definitions.py`.
+  `DEFAULT_SETTINGS` dict in `reelay/definitions.py`. Comment it in the example
+  — `make config-migrate` copies that comment into existing installs along with
+  the key, and it is the only explanation they get. If the bot reads the key
+  defensively and simply leaves a feature off when it's absent, add its path to
+  `OPTIONAL_KEYS` (also in `definitions.py`) so existing configs aren't told
+  they're broken. Then run `make config-check` against a real `config.yaml` to
+  see what an operator will see.
 
 ## Versioning
 
