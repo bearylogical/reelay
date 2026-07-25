@@ -3,7 +3,13 @@ import warnings
 
 import yaml
 
-from .definitions import CONFIG_PATH, CONFIG_EXAMPLE_PATH, DEFAULT_SETTINGS
+from .definitions import (
+    CONFIG_PATH,
+    CONFIG_EXAMPLE_PATH,
+    DEFAULT_SETTINGS,
+    OPTIONAL_KEYS,
+    flatten_dict,
+)
 
 # Fall back to the example config when config.yaml is absent (fresh checkout,
 # CI, tests). The bot still needs a real token to actually connect.
@@ -22,28 +28,11 @@ for setting, default_value in DEFAULT_SETTINGS.items():
         config[setting] = default_value
 
 
-def flatten_dict(dd, separator ='/', prefix =''):
-    return { prefix + separator + k if prefix else k : v
-             for kk, vv in dd.items()
-             for k, v in flatten_dict(vv, separator, kk).items()
-             } if isinstance(dd, dict) else { prefix : dd }
-
-
-# Keys the bot reads defensively (config.get(...)) and whose absence simply
-# leaves a feature switched off. A config.yaml written before one of these
-# existed is not misconfigured, so they must never block startup or warn --
-# otherwise every new optional feature makes every existing install look broken.
-OPTIONAL_KEYS = {
-    "overseerr/webhookSecret",
-    "radarr/webhookSecret",
-    "sonarr/webhookSecret",
-}
-
-
 def checkConfig():
     """Keys in the example that the user's config is missing, excluding the
-    optional ones. Add new optional keys to OPTIONAL_KEYS above, not just to
-    config_example.yaml."""
+    optional ones. Add new optional keys to OPTIONAL_KEYS in definitions.py,
+    not just to config_example.yaml. `make config-check` reports the same
+    drift ahead of a restart; `make config-migrate` closes it."""
     present = flatten_dict(config)
     return [key for key in flatten_dict(config_example)
             if key not in present and key not in OPTIONAL_KEYS]

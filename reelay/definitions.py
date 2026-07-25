@@ -35,3 +35,23 @@ DEFAULT_SETTINGS = {
     "miniapp": { "enable": False, "url": "", "listenHost": "0.0.0.0", "listenPort": 8080 },
     "weeklyDigest": { "enable": False },
 }
+
+
+def flatten_dict(dd, separator ='/', prefix =''):
+    return { prefix + separator + k if prefix else k : v
+             for kk, vv in dd.items()
+             for k, v in flatten_dict(vv, separator, kk).items()
+             } if isinstance(dd, dict) else { prefix : dd }
+
+
+# Keys the bot reads defensively (config.get(...)) and whose absence simply
+# leaves a feature switched off. A config.yaml written before one of these
+# existed is not misconfigured, so they must never block startup or warn --
+# otherwise every new optional feature makes every existing install look broken.
+# Lives here rather than in config.py so the migration tool can read it without
+# importing (and therefore loading) a config.yaml that may be broken.
+OPTIONAL_KEYS = {
+    "overseerr/webhookSecret",
+    "radarr/webhookSecret",
+    "sonarr/webhookSecret",
+}
