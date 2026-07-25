@@ -13,6 +13,13 @@ and add events) and bot.addSerieMovie (reelay's own /start add flow). Because
 the same item can arrive from several of them, _dedupe() collapses by external
 id first and normalized title second.
 
+Those are all push sources, so a digest built only from them is empty until
+every webhook is wired -- and stays empty for anything that happened while the
+bot was restarting. collect_events() therefore also PULLS the current picture
+from Overseerr (see overseerr_events()), which needs no webhook at all and is
+the same well sendReminders() has always drawn from. The two merge through the
+usual _dedupe(), so an item both saw is one line carrying both sources.
+
 Each scope picks its own day/hour for the group post (and whether it's on at
 all) via the Mini App -- see db.setWeeklyDigestConfig(). `weekly_digest_tick`
 runs hourly and dispatches to whichever scopes are due; `enabled()` is just
@@ -21,12 +28,14 @@ the master switch for whether that hourly job runs at all.
 
 import logging
 import re
+import time
 import types
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from . import channels
 from . import db
 from . import logger
+from . import overseerr
 from .config import config
 from .translations import i18n
 
@@ -120,6 +129,146 @@ def _dedupe(events):
             by_id[kept["external_id"]] = kept
         by_title.setdefault(_norm(kept.get("title")), {})[kept.get("media_type") or None] = kept
     return out
+
+
+# --- Overseerr poll -----------------------------------------------------------
+#
+# media_events only holds what something told us about, so a library whose
+# webhooks were never wired produces an empty digest no matter how much was
+# added. Overseerr already knows; we just ask.
+#
+# The catch is that a poll returns current STATE, not observed transitions, so
+# "this week" has to come from a timestamp -- and which timestamp depends on
+# the bucket. A film requested in April that landed yesterday is new this week;
+# reading its createdAt would put it outside every window it will ever have,
+# hiding it forever. Availability is dated by mediaAddedAt (when it landed),
+# "coming soon" by createdAt (when it was asked for).
+
+_POLL_SOURCE = "overseerr-poll"
+
+# MediaInfo.status -- see overseerr._STATUS_BADGES for the full list.
+_POLL_AVAILABLE = {4, 5}  # PARTIALLY_AVAILABLE, AVAILABLE
+_POLL_PENDING = {2, 3}    # PENDING, PROCESSING -- wanted, not watchable yet
+# MediaRequest.status: 3 DECLINED, 4 FAILED. Neither is ever going to arrive.
+_POLL_DEAD_REQUEST = {3, 4}
+
+# Requests are walked oldest-to-newest-agnostic (we can't stop early: an old
+# request can have become available yesterday), so this bounds the walk on a
+# long-lived install. Hitting it is logged, never silent.
+POLL_MAX_REQUESTS = 1000
+
+# The Mini App's "this week" view hits this on every open, and each call is a
+# blocking HTTP round trip (plus a title lookup per new item). A short TTL
+# keeps a burst of opens down to one poll; a weekly digest does not need
+# second-fresh data.
+POLL_TTL_SECONDS = 300
+_poll_cache = {"at": 0.0, "days": None, "events": []}
+
+
+def _parse_ts(value):
+    """Overseerr's ISO-8601 timestamps as an aware UTC datetime, or None.
+    Naive values are read as UTC -- Overseerr stores UTC throughout."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _poll_event(req, cutoff, title_cache):
+    """One Overseerr request as a media_events-shaped dict, or None if it falls
+    outside the window or has nothing worth announcing."""
+    if req.get("status") in _POLL_DEAD_REQUEST:
+        return None
+    media = req.get("media") or {}
+    status = media.get("status")
+    if status in _POLL_AVAILABLE:
+        event = EVENT_AVAILABLE
+        # updatedAt is a fallback, not a preference: it moves on any edit, so
+        # it can re-announce an old item. Better one stale line than a digest
+        # that silently drops everything on an Overseerr that doesn't set
+        # mediaAddedAt -- which is the failure this whole path exists to fix.
+        when = _parse_ts(media.get("mediaAddedAt")) or _parse_ts(media.get("updatedAt"))
+    elif status in _POLL_PENDING:
+        event = EVENT_ADDED
+        when = _parse_ts(req.get("createdAt"))
+    else:
+        return None  # UNKNOWN / DELETED -- nothing to say about it
+    if when is None or when < cutoff:
+        return None
+
+    # Titles cost an HTTP call each, so they're resolved only for survivors.
+    tmdb, tvdb = media.get("tmdbId"), media.get("tvdbId")
+    if (tmdb, tvdb) not in title_cache:
+        title_cache[(tmdb, tvdb)] = overseerr.getMediaTitle(tmdb, tvdb)
+    title, media_type = title_cache[(tmdb, tvdb)]
+    if not title:
+        # Same rule as the *arr webhooks: an untitled row has nothing to print
+        # and would dedupe against every other untitled row.
+        return None
+
+    is_tv = media_type == "tv"
+    requested_by = req.get("requestedBy") or {}
+    return {
+        "title": title,
+        "media_type": media_type,
+        # displayName matches what db.linkSeerr() stored as seerr_username,
+        # so _matches() can attribute this to a member for their personal DM.
+        "requested_by_username": overseerr.displayName(requested_by) if requested_by else None,
+        "requested_by_email": requested_by.get("email"),
+        "occurred_at": when.isoformat(),
+        "source": _POLL_SOURCE,
+        "event": event,
+        # tmdb for movies, tvdb for tv -- the same namespaces the Radarr and
+        # Sonarr webhooks use, so a polled item dedupes against a pushed one.
+        "external_id": external_id("tvdb" if is_tv else "tmdb", tvdb if is_tv else tmdb),
+    }
+
+
+def overseerr_events(days=7):
+    """The last `days` of library activity as Overseerr sees it, shaped like
+    media_events rows. Needs no webhook. Returns [] if Overseerr isn't
+    configured, and degrades to [] rather than raising if it's unreachable --
+    a dead Overseerr must not cost us the events we did record."""
+    if not overseerr.enabled():
+        return []
+    now = time.monotonic()
+    if _poll_cache["days"] == days and now - _poll_cache["at"] < POLL_TTL_SECONDS:
+        return list(_poll_cache["events"])
+
+    raw = overseerr.getRequests(max_items=POLL_MAX_REQUESTS)
+    if len(raw) >= POLL_MAX_REQUESTS:
+        logger.warning(
+            f"Overseerr poll hit the {POLL_MAX_REQUESTS}-request cap; older requests were not "
+            f"examined and anything among them that became available this week will be missing."
+        )
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    title_cache, out = {}, []
+    for req in raw:
+        try:
+            event = _poll_event(req, cutoff, title_cache)
+        except Exception as e:
+            logger.warning(f"Overseerr poll: skipped request {req.get('id')}: {e}")
+            continue
+        if event:
+            out.append(event)
+
+    _poll_cache.update({"at": now, "days": days, "events": list(out)})
+    logger.info(f"Overseerr poll: {len(out)} item(s) in the last {days} days, from {len(raw)} request(s).")
+    return out
+
+
+def collect_events(days=7):
+    """Everything this week's digest should consider: what we recorded from
+    webhooks and reelay's own adds, plus what Overseerr reports directly.
+
+    Recorded events come first so _dedupe() keeps them as the surviving copy --
+    they carry an observed occurred_at, where a polled row's timestamp is
+    inferred from Overseerr's current state. The polled duplicate still merges
+    its source in, so `sourceCounts` shows both."""
+    return db.getRecentMediaEvents(days) + overseerr_events(days)
 
 
 def _split(events):
@@ -267,9 +416,12 @@ async def weekly_digest_tick(context):
     if not due:
         return
 
-    events = db.getRecentMediaEvents(7)
+    events = collect_events(7)
     if not events:
-        logger.info(f"Weekly digest: {len(due)} scope(s) due but no media events in the last 7 days.")
+        logger.info(
+            f"Weekly digest: {len(due)} scope(s) due but nothing in the last 7 days -- no recorded "
+            f"webhook/reelay events, and Overseerr reported nothing either."
+        )
         db.pruneMediaEvents(30)
         return
 

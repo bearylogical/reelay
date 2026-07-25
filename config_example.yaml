@@ -116,8 +116,13 @@ miniapp:
 # It records from every source you wire up -- the Overseerr webhook
 # (overseerr.webhookSecret), the Radarr/Sonarr webhooks (radarr.webhookSecret /
 # sonarr.webhookSecret), and reelay's own /start add flow -- and dedupes across
-# them, so anything added straight in Radarr/Sonarr still shows up. With no
-# webhook configured at all, only reelay's own adds are recorded.
+# them, so anything added straight in Radarr/Sonarr still shows up.
+#
+# It also asks Overseerr directly each run, so if overseerr.url/apikey are set
+# you get a digest with no webhook configured at all. The webhooks are still
+# worth wiring: they're the only way anything added straight in Radarr/Sonarr,
+# outside Overseerr, reaches the digest. Check the Mini App's "this week" view
+# to see which sources are actually reporting.
 #
 # This only turns the feature on/off system-wide -- each group picks its own
 # day of week, hour, and on/off from the Mini App's Members tab.

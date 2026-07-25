@@ -1,10 +1,11 @@
 import asyncio
 import json
-from datetime import datetime
-from unittest.mock import AsyncMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 
 from aiohttp.test_utils import TestClient, TestServer
 
+import reelay.config as cfg
 import reelay.db as db
 import reelay.digest as digest
 import reelay.miniapp as miniapp
@@ -460,3 +461,181 @@ def test_group_post_stays_free_of_source_tags():
     _, group, _ = send_digest()
     assert "radarr" not in group.lower()
     assert group.splitlines()[1] == "🎬 The Matrix"
+
+
+# --- Overseerr poll ------------------------------------------------------------
+#
+# The push sources above all require a webhook the admin may never have wired.
+# These cover the pull path: what Overseerr itself reports, with no webhook.
+
+def seerr_request(tmdb=None, tvdb=None, media_status=5, request_status=2,
+                  media_added=None, created=None, updated=None, user=None, req_id=1):
+    """One Overseerr /api/v1/request result, trimmed to the fields we read."""
+    return {
+        "id": req_id,
+        "status": request_status,
+        "createdAt": created or iso_days_ago(1),
+        "requestedBy": user,
+        "media": {
+            "status": media_status,
+            "tmdbId": tmdb,
+            "tvdbId": tvdb,
+            "mediaAddedAt": media_added,
+            "updatedAt": updated,
+        },
+    }
+
+
+def iso_days_ago(days):
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+
+def poll_with(raw_requests, titles=None, days=7):
+    """Run overseerr_events() against a canned request list. `titles` maps
+    (tmdbId, tvdbId) -> (title, media_type), as getMediaTitle returns."""
+    titles = titles or {}
+    digest._poll_cache.update({"at": 0.0, "days": None, "events": []})
+    with patch.object(digest.overseerr, "getRequests", return_value=raw_requests), \
+         patch.object(digest.overseerr, "getMediaTitle",
+                      side_effect=lambda tmdb, tvdb: titles.get((tmdb, tvdb), (None, "movie"))):
+        return digest.overseerr_events(days)
+
+
+def test_poll_surfaces_available_and_pending_without_any_webhook():
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(2), req_id=1),
+         seerr_request(tmdb=438631, media_status=3, created=iso_days_ago(3), req_id=2)],
+        titles={(603, None): ("The Matrix", "movie"), (438631, None): ("Dune", "movie")},
+    )
+    by_title = {e["title"]: e for e in events}
+    assert by_title["The Matrix"]["event"] == digest.EVENT_AVAILABLE
+    assert by_title["Dune"]["event"] == digest.EVENT_ADDED
+    assert {e["source"] for e in events} == {"overseerr-poll"}
+
+
+def test_poll_dates_availability_by_mediaAddedAt_not_createdAt():
+    # The regression this whole path turns on: requested months ago, landed
+    # yesterday. Windowing on createdAt would hide it from every digest.
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, created=iso_days_ago(90),
+                       media_added=iso_days_ago(1))],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    assert [e["title"] for e in events] == ["The Matrix"]
+
+
+def test_poll_ignores_items_that_landed_before_the_window():
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(30))],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    assert events == []
+
+
+def test_poll_skips_declined_failed_and_unknown():
+    events = poll_with(
+        [seerr_request(tmdb=1, request_status=3, media_added=iso_days_ago(1)),   # declined
+         seerr_request(tmdb=2, request_status=4, media_added=iso_days_ago(1)),   # failed
+         seerr_request(tmdb=3, media_status=1, media_added=iso_days_ago(1)),     # unknown
+         seerr_request(tmdb=4, media_status=6, media_added=iso_days_ago(1))],    # deleted
+        titles={(n, None): (f"Film {n}", "movie") for n in (1, 2, 3, 4)},
+    )
+    assert events == []
+
+
+def test_poll_carries_requester_so_personal_dms_still_work():
+    routed_scope()
+    db.upsertMembership(SCOPE, "1", "alice", status="approved")
+    db.approveMembership(SCOPE, "1", approved_by="x")
+    db.linkSeerr(SCOPE, "1", 11, seerr_username="alice", seerr_email="a@x.com")
+
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(1),
+                       user={"id": 11, "displayName": "alice", "email": "a@x.com"})],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    ctx = type("C", (), {"bot": AsyncMock()})()
+    asyncio.run(digest.send_weekly_digest_to_scope(ctx, db.getScope(SCOPE), events))
+    dms = [c for c in ctx.bot.send_message.call_args_list if "message_thread_id" not in c.kwargs]
+    assert any(c.kwargs["chat_id"] == 1 and "The Matrix" in c.kwargs["text"] for c in dms)
+
+
+def test_polled_item_dedupes_against_the_webhook_row_and_credits_both():
+    db.recordMediaEvent("The Matrix (1999)", "movie", source="overseerr", external_id="tmdb:603")
+    polled = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(1))],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    b = digest.weekly_breakdown(db.getRecentMediaEvents(7) + polled)
+    assert b["counts"]["movie"] == 1
+    assert sources_for("The Matrix (1999)", b) == ["overseerr", "overseerr-poll"]
+
+
+def test_poll_uses_tvdb_for_tv_so_it_dedupes_against_sonarr():
+    db.recordMediaEvent("Severance", "tv", source="sonarr", external_id="tvdb:371980")
+    polled = poll_with(
+        [seerr_request(tmdb=95396, tvdb=371980, media_status=5, media_added=iso_days_ago(1))],
+        titles={(95396, 371980): ("Severance", "tv")},
+    )
+    assert polled[0]["external_id"] == "tvdb:371980"
+    b = digest.weekly_breakdown(db.getRecentMediaEvents(7) + polled)
+    assert b["counts"]["tv"] == 1
+
+
+def test_poll_falls_back_to_updatedAt_when_mediaAddedAt_is_absent():
+    # Not every Overseerr version sets mediaAddedAt; dropping the item would
+    # reproduce the empty digest this path exists to fix.
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=None, updated=iso_days_ago(1))],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    assert [e["title"] for e in events] == ["The Matrix"]
+
+
+def test_poll_skips_items_with_no_usable_timestamp():
+    events = poll_with(
+        [seerr_request(tmdb=603, media_status=5, media_added=None, updated=None)],
+        titles={(603, None): ("The Matrix", "movie")},
+    )
+    assert events == []
+
+
+def test_poll_skips_untitled_items():
+    events = poll_with([seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(1))])
+    assert events == []
+
+
+def test_poll_returns_nothing_when_overseerr_is_disabled():
+    cfg.config["overseerr"]["enable"] = False
+    try:
+        assert poll_with([seerr_request(tmdb=603, media_added=iso_days_ago(1))]) == []
+    finally:
+        cfg.config["overseerr"]["enable"] = True
+
+
+def test_poll_survives_an_unreachable_overseerr():
+    # getRequests already swallows transport errors and returns []; the point
+    # here is that a bad response shape can't take the digest down with it.
+    digest._poll_cache.update({"at": 0.0, "days": None, "events": []})
+    with patch.object(digest.overseerr, "getRequests", return_value=[{"media": "not-a-dict"}]):
+        assert digest.overseerr_events(7) == []
+
+
+def test_collect_events_merges_recorded_and_polled():
+    db.recordMediaEvent("Dune", "movie", source="radarr", external_id="tmdb:438631")
+    digest._poll_cache.update({"at": 0.0, "days": None, "events": []})
+    with patch.object(digest.overseerr, "getRequests",
+                      return_value=[seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(1))]), \
+         patch.object(digest.overseerr, "getMediaTitle", return_value=("The Matrix", "movie")):
+        events = digest.collect_events(7)
+    assert {e["title"] for e in events} == {"Dune", "The Matrix"}
+
+
+def test_poll_is_cached_so_repeated_miniapp_opens_dont_hammer_overseerr():
+    digest._poll_cache.update({"at": 0.0, "days": None, "events": []})
+    raw = [seerr_request(tmdb=603, media_status=5, media_added=iso_days_ago(1))]
+    with patch.object(digest.overseerr, "getRequests", return_value=raw) as get, \
+         patch.object(digest.overseerr, "getMediaTitle", return_value=("The Matrix", "movie")):
+        digest.overseerr_events(7)
+        digest.overseerr_events(7)
+    assert get.call_count == 1

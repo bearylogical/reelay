@@ -160,7 +160,7 @@ async def weekly(request):
     """This week's TV/movie breakdown (any approved member) -- same source
     data as the scheduled group digest, see digest.weekly_breakdown()."""
     _authed(request)
-    return web.json_response(digest.weekly_breakdown(db.getRecentMediaEvents(7)))
+    return web.json_response(digest.weekly_breakdown(digest.collect_events(7)))
 
 
 async def send_weekly_now(request):
@@ -171,7 +171,7 @@ async def send_weekly_now(request):
     later the same day."""
     _, scope, membership, _ = _authed(request)
     _require_admin(membership)
-    events = db.getRecentMediaEvents(7)
+    events = digest.collect_events(7)
     if not events:
         return web.json_response({"ok": False, "error": "nothing_this_week"})
     shim = types.SimpleNamespace(bot=request.app["bot"])
