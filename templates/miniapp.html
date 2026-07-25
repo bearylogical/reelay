@@ -41,6 +41,9 @@
   .card .t { font-weight: 600; }
   .card .m { color: var(--hint); font-size: 13px; margin-top: 3px; }
   .badge { font-size: 12px; margin-top: 4px; }
+  /* Which service reported an item -- sits inside .card .m, which is already
+     hint-coloured, so it leans on size and opacity to recede further. */
+  .src { font-size: 11px; opacity: .65; }
   .mine { color: var(--link); font-size: 11px; }
   .req-btn { background: var(--btn); color: var(--btn-text); border: none; border-radius: 8px;
     padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -203,12 +206,21 @@ async function loadWeekly() {
   const box = el("weeklyCard");
   try {
     const data = await api("/api/weekly");
-    const total = (data.counts.movie || 0) + (data.counts.tv || 0);
-    if (!total) { box.style.display = "none"; return; }
+    const c = data.counts || {};
+    // `other` = an event whose source didn't say movie or tv. Counted here so
+    // a title can never be in the digest but missing from this card.
+    const watchable = (c.movie || 0) + (c.tv || 0) + (c.other || 0);
+    const added = data.added || [];
+    if (!watchable && !added.length) { box.style.display = "none"; return; }
     box.style.display = ""; box.style.cursor = "pointer"; box.dataset.expanded = "false";
+    const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    const summary = [`🎬 ${plural(c.movie || 0, "movie")}`, `📺 ${plural(c.tv || 0, "show")}`]
+      .concat(c.other ? [`🍿 ${plural(c.other, "other")}`] : [])
+      .concat(added.length ? [`🆕 ${added.length} coming soon`] : [])
+      .join(" · ");
     box.innerHTML = `<div class="body">
       <div class="t">This week</div>
-      <div class="m">🎬 ${data.counts.movie} movie${data.counts.movie === 1 ? "" : "s"} · 📺 ${data.counts.tv} show${data.counts.tv === 1 ? "" : "s"}</div>
+      <div class="m">${summary}</div>
       <div class="m" id="weeklyList" style="display:none"></div>
     </div>`;
     box.onclick = () => {
@@ -217,7 +229,23 @@ async function loadWeekly() {
       box.dataset.expanded = expanded ? "false" : "true";
       list.style.display = expanded ? "none" : "block";
       if (!expanded) {
-        list.innerHTML = [...data.movies.map(t => `🎬 ${H(t)}`), ...data.tv.map(t => `📺 ${H(t)}`)].join("<br>");
+        // Which service told us about an item -- the only way to tell whether
+        // a webhook you wired up is actually delivering.
+        const SOURCE_LABELS = { overseerr: "Overseerr", radarr: "Radarr", sonarr: "Sonarr", reelay: "Reelay" };
+        const row = (icon, e) => {
+          const tags = (e.sources || []).map(s => SOURCE_LABELS[s] || s).join(", ");
+          return `${icon} ${H(e.title)}${tags ? ` <span class="src">${H(tags)}</span>` : ""}`;
+        };
+        const rows = [
+          ...data.movies.map(e => row("🎬", e)),
+          ...data.tv.map(e => row("📺", e)),
+          ...(data.other || []).map(e => row("🍿", e)),
+        ];
+        if (added.length) rows.push("", "<b>Coming soon</b>", ...added.map(e => row("🆕", e)));
+        const sc = data.sourceCounts || {};
+        const reported = Object.keys(sc).map(s => `${SOURCE_LABELS[s] || s} ${sc[s]}`).join(" · ");
+        if (reported) rows.push("", `<span class="src">Reported by ${H(reported)}</span>`);
+        list.innerHTML = rows.join("<br>");
       }
     };
   } catch (e) { box.style.display = "none"; }
@@ -454,7 +482,11 @@ el("sendWeeklyNow").addEventListener("click", async () => {
   btn.disabled = true;
   try {
     const res = await api("/api/weekly/send", { method: "POST" });
-    toast(res.ok ? "Posted to the group" : "Nothing new to post this week");
+    // not_delivered means there was something to post but nowhere to post it,
+    // which is a setup problem the admin needs told about -- not a quiet week.
+    toast(res.ok ? "Posted to the group"
+      : res.error === "not_delivered" ? "Nowhere to post — run /routehere updates in the group first"
+      : "Nothing new to post this week");
   } catch (e) { toast("Couldn't post the update"); }
   btn.disabled = false;
 });

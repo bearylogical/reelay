@@ -1264,7 +1264,29 @@ async def addSerieMovie(update, context):
             added = service.addToLibrary(idnumber, path, qualityProfile, tags, seasonsSelected)
         
         if added:
-            if choice == i18n.t("reelay.Movie"):
+            isMovie = choice == i18n.t("reelay.Movie")
+            # This add never touches Overseerr, so without recording it here it
+            # would be missing from our own weekly digest. 'added', not
+            # 'available' -- nothing is watchable until it downloads. If the
+            # Radarr/Sonarr webhook is also configured, the later import event
+            # carries the same external id and dedupes against this row.
+            try:
+                addedTitle = context.user_data["output"][position]["title"]
+                db.recordMediaEvent(
+                    title=addedTitle,
+                    media_type="movie" if isMovie else "tv",
+                    source="reelay",
+                    event=digest.EVENT_ADDED,
+                    external_id=digest.external_id("tmdb" if isMovie else "tvdb", idnumber),
+                )
+                # Matches the webhook receivers' format, so every digest source
+                # leaves the same trace in the log.
+                logger.info(f"Recorded media_event: {addedTitle} ({'movie' if isMovie else 'tv'}) added via reelay")
+            except Exception as e:
+                # Never fail the user's add because the digest bookkeeping did.
+                logger.warning(f"Could not record media_event for {idnumber}: {e}")
+
+            if isMovie:
                 message=i18n.t("reelay.messages.AddSuccess", subjectWithArticle=i18n.t("reelay.MovieWithArticle"))
             else:
                 message=i18n.t("reelay.messages.AddSuccess", subjectWithArticle=i18n.t("reelay.SeriesWithArticle"))

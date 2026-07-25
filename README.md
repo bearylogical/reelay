@@ -66,9 +66,12 @@ grew into a group-native, Overseerr-first bot with its own architecture.
 - **Watched-aware reminders.** N days after a request becomes available, Reelay
   DMs the requester a nudge — *unless* Overseerr's watch data shows they already
   watched it.
-- **Weekly "what's new".** The Overseerr webhook records availability events; once
-  a week Reelay posts a library-wide roundup into `#updates` and DMs each member
-  the items **they** requested that went live.
+- **Weekly "what's new".** Reelay records library events from every source you
+  wire up — the Overseerr webhook, the Radarr/Sonarr webhooks, and its own
+  `/start` add flow — and dedupes across them, so something added straight in
+  Radarr still shows up. Once a week it posts a library-wide roundup into
+  `#updates` (split into what's watchable now and what's coming soon) and DMs
+  each member the items **they** requested that went live.
 - **Group-safe inline keyboards, `/switch` for multi-group DMs, and the original
   Sonarr/Radarr list + Transmission/Sabnzbd speed controls.**
 
@@ -89,15 +92,31 @@ opt-in blocks in `config.yaml`.
 
 ### Enabling the Mini App / webhook (public HTTPS)
 
-Telegram requires HTTPS for Mini Apps, and Overseerr needs a reachable webhook
+Telegram requires HTTPS for Mini Apps, and the webhook senders need a reachable
 URL. The shipped `docker-compose.yml` includes a `cloudflared` sidecar:
 
 1. Create a Cloudflare tunnel, route a hostname to `http://localhost:8080`.
 2. Put its token in `CLOUDFLARE_TUNNEL_TOKEN` (a `.env` file works).
 3. Set `miniapp.url: https://<host>/miniapp/` and `miniapp.enable: true`.
-4. For the digest: set `overseerr.webhookSecret`, point Overseerr's Webhook agent
-   at `https://<host>/overseerr/webhook/<secret>`, and `/routehere updates` in
-   `#updates`.
+4. Run `/routehere updates` in your `#updates` topic — **without this the digest
+   has nowhere to post** (Reelay logs a warning when that happens).
+5. Wire up whichever sources you use. Each secret is any long random string, and
+   each service's "Test" button confirms the round trip in `#updates`:
+
+   | Source | Config key | URL | Where |
+   |---|---|---|---|
+   | Overseerr | `overseerr.webhookSecret` | `https://<host>/overseerr/webhook/<secret>` | Settings → Notifications → Webhook |
+   | Radarr | `radarr.webhookSecret` | `https://<host>/radarr/webhook/<secret>` | Settings → Connect → Webhook, tick *On Import* (and optionally *On Movie Added*) |
+   | Sonarr | `sonarr.webhookSecret` | `https://<host>/sonarr/webhook/<secret>` | Settings → Connect → Webhook, tick *On Import* (and optionally *On Series Add*) |
+
+   Imports count as **watchable now**; the *Added* events only mean it's wanted,
+   so they're listed under "coming soon". Quality upgrades are skipped. Adds made
+   through Reelay's own `/start` flow are recorded with no webhook needed.
+
+   To check a source is actually delivering, expand the Mini App's **This week**
+   card: each title is tagged with the service(s) that reported it, and the
+   footer tallies them (`Reported by Overseerr 4 · Radarr 2`). The group post
+   deliberately omits this — it's a diagnostic, not something `#updates` needs.
 
 ---
 
@@ -116,7 +135,7 @@ python -m reelay
 
 Single process, single SQLite file (`reelay.db`), no ORM. The Telegram bot runs
 on long polling; a small **aiohttp** server (started on the same loop) serves the
-Mini App and the Overseerr webhook. Background jobs (reminders, weekly digest)
+Mini App and the Overseerr/Radarr/Sonarr webhooks. Background jobs (reminders, weekly digest)
 run on python-telegram-bot's `JobQueue`.
 
 | Module | Responsibility |
@@ -132,7 +151,7 @@ run on python-telegram-bot's `JobQueue`.
 | `channels.py` | Category (`requests`/`updates`) → forum-topic routing: `/routehere`, `/routes`, `/unroute` |
 | `reminders`* | Watched-aware nudge job (in `bot.py`) |
 | `digest.py` | Weekly what's-new (group post + personal DMs) |
-| `webhooks.py` | Overseerr webhook receiver (records availability) |
+| `webhooks.py` | Overseerr/Radarr/Sonarr webhook receivers (record library events for the digest) |
 | `miniapp.py` | aiohttp server, initData auth; dashboard/queue/catalog/request API; admin API for members, roles, invite code, join policy, feature flags, and chat-access requests; Plex linking API |
 | `add.py`* / `delete.py` / `listing.py` / `transmission.py` / `sabnzbd.py` | Conversation flows |
 

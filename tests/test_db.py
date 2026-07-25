@@ -235,3 +235,45 @@ def test_legacy_chatid_migration(tmp_path, monkeypatch):
     assert db.isChatAuthorized("111") is True
     assert db.isChatAuthorized("222") is True
     assert set(db.getApprovedChatIds()) == {"111", "222"}
+
+
+def test_media_events_migration_from_pre_source_schema(tmp_path, monkeypatch):
+    """A database created before source/event/external_id existed must gain the
+    columns on startup, with every existing row reading back as what it was:
+    an Overseerr availability event."""
+    old_db = str(tmp_path / "legacy.db")
+    monkeypatch.setattr(db, "DB_PATH", old_db)
+
+    con = sqlite3.connect(old_db)
+    con.execute(
+        """CREATE TABLE media_events (
+               id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+               title                   TEXT,
+               media_type              TEXT,
+               requested_by_username   TEXT,
+               requested_by_email      TEXT,
+               occurred_at             TEXT NOT NULL
+           )"""
+    )
+    con.execute(
+        "INSERT INTO media_events (title, media_type, requested_by_email, occurred_at)"
+        " VALUES ('The Matrix', 'movie', 'a@x.com', datetime('now'))"
+    )
+    con.commit()
+    con.close()
+
+    db.initDb()  # must not raise on the pre-existing table
+
+    (row,) = db.getRecentMediaEvents(7)
+    assert row["title"] == "The Matrix"
+    assert row["source"] == "overseerr"
+    assert row["event"] == "available"
+    assert row["external_id"] is None
+
+    # Idempotent: a second startup on the migrated file is a no-op.
+    db.initDb()
+    assert len(db.getRecentMediaEvents(7)) == 1
+
+    # And the new columns are writable afterwards.
+    db.recordMediaEvent("Dune", "movie", source="radarr", event="added", external_id="tmdb:438631")
+    assert {r["source"] for r in db.getRecentMediaEvents(7)} == {"overseerr", "radarr"}

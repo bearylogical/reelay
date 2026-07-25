@@ -127,16 +127,24 @@ def initDb():
                 PRIMARY KEY (scope_chat_id, category)
             );
 
-            -- Availability events recorded from the Overseerr webhook, digested
-            -- into the weekly "what's new" (group) + personal DMs. requester
-            -- fields let us attribute an item to the member who requested it.
+            -- Library events feeding the weekly "what's new" (group) + personal
+            -- DMs. requester fields let us attribute an item to the member who
+            -- requested it (only Overseerr supplies them).
+            --   source: who told us -- 'overseerr' | 'radarr' | 'sonarr' | 'reelay'
+            --   event:  'available' (watchable now) | 'added' (queued, coming soon)
+            --   external_id: 'tmdb:603' / 'tvdb:359274' when known -- the only
+            --     dedupe key that survives the two sources spelling a title
+            --     differently ("The Matrix (1999)" vs "The Matrix").
             CREATE TABLE IF NOT EXISTS media_events (
                 id                      INTEGER PRIMARY KEY AUTOINCREMENT,
                 title                   TEXT,
                 media_type              TEXT,
                 requested_by_username   TEXT,
                 requested_by_email      TEXT,
-                occurred_at             TEXT NOT NULL
+                occurred_at             TEXT NOT NULL,
+                source                  TEXT NOT NULL DEFAULT 'overseerr',
+                event                   TEXT NOT NULL DEFAULT 'available',
+                external_id             TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_media_events_time ON media_events(occurred_at);
 
@@ -183,6 +191,19 @@ def initDb():
             "ALTER TABLE scopes ADD COLUMN weekly_digest_day TEXT NOT NULL DEFAULT 'monday'",
             "ALTER TABLE scopes ADD COLUMN weekly_digest_hour INTEGER NOT NULL DEFAULT 9",
             "ALTER TABLE scopes ADD COLUMN weekly_digest_last_sent TEXT",
+        ):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+        # media_events.source/event/external_id added after the fact, when the
+        # digest stopped being Overseerr-only. Every pre-existing row came from
+        # the Overseerr webhook's MEDIA_AVAILABLE, so the defaults backfill
+        # them correctly with no data migration.
+        for stmt in (
+            "ALTER TABLE media_events ADD COLUMN source TEXT NOT NULL DEFAULT 'overseerr'",
+            "ALTER TABLE media_events ADD COLUMN event TEXT NOT NULL DEFAULT 'available'",
+            "ALTER TABLE media_events ADD COLUMN external_id TEXT",
         ):
             try:
                 conn.execute(stmt)
@@ -734,12 +755,19 @@ def deleteChannelRoute(scope_chat_id, category):
 
 # --- media_events (weekly digest source) --------------------------------------
 
-def recordMediaEvent(title, media_type, requested_by_username=None, requested_by_email=None):
+def recordMediaEvent(title, media_type, requested_by_username=None, requested_by_email=None,
+                     source="overseerr", event="available", external_id=None):
+    """Record one library event for the weekly digest. `event` is 'available'
+    (watchable now -- Overseerr MEDIA_AVAILABLE, *arr import) or 'added'
+    (queued, not yet downloaded). Duplicates are fine and expected: Sonarr
+    fires per episode, so a season lands as N rows for the same series --
+    digest._dedupe() collapses them at render time."""
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO media_events (title, media_type, requested_by_username, requested_by_email, occurred_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (title, media_type, requested_by_username, requested_by_email, _now()),
+            "INSERT INTO media_events (title, media_type, requested_by_username, requested_by_email,"
+            " occurred_at, source, event, external_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, media_type, requested_by_username, requested_by_email, _now(),
+             source, event, external_id),
         )
 
 
