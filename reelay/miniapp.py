@@ -232,6 +232,7 @@ async def submit_request(request):
     await channels.announce(
         shim, scope["chat_id"], channels.CATEGORY_REQUESTS,
         text,
+        photo=overseerr.getPosterUrl(media_type, media_id),
     )
     return web.json_response({"ok": True})
 

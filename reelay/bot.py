@@ -970,14 +970,15 @@ async def requestViaOverseerr(update, context):
         chat_id=update.effective_message.chat_id,
         text=i18n.t("reelay.Overseerr.Requested", title=title),
     )
-    await announceRequest(update, context, scope, title)
+    await announceRequest(update, context, scope, title, poster=item.get("poster"))
     clearUserData(context)
     return ConversationHandler.END
 
 
-async def announceRequest(update, context, scope, title):
+async def announceRequest(update, context, scope, title, poster=None):
     """Post a public record of a request into the scope's configured request
-    channel/topic (no-op if none configured, or if we're already there)."""
+    channel/topic (no-op if none configured, or if we're already there). The
+    poster, when we have one, rides along as the post's link preview."""
     if scope is None:
         return
     user = update.effective_user
@@ -992,6 +993,7 @@ async def announceRequest(update, context, scope, title):
         text,
         from_chat_id=update.effective_chat.id,
         from_thread_id=update.effective_message.message_thread_id,
+        photo=poster,
     )
 
 
@@ -1318,7 +1320,11 @@ async def addSerieMovie(update, context):
                     chat_id=adminNotifyId, text=message2
                 )
             scope = await resolveScope(update, context)
-            await announceRequest(update, context, scope, context.user_data['output'][position]['title'])
+            await announceRequest(
+                update, context, scope,
+                context.user_data['output'][position]['title'],
+                poster=context.user_data['output'][position].get('poster'),
+            )
             clearUserData(context)
             return ConversationHandler.END
         else:
