@@ -196,18 +196,15 @@ def format_long_list_message(list):
         return stringParts
 
 
-def getAuthChats():
-    return db.getApprovedChatIds()
-
-
 def getAdminChatIds():
     """Chat ids for operational warnings: the configured adminNotifyId, numeric
     entries in admin.txt, and every approved scope admin.
 
-    Deliberately NOT getAuthChats() -- a misconfigured bot is the operator's
-    problem, and broadcasting it to every authorized user is noise they can do
-    nothing about. Returns [] when no admin is identifiable, in which case the
-    caller should just log rather than fall back to telling everyone."""
+    Deliberately not every approved chat (db.getApprovedChatIds()), which is
+    what this used to broadcast to -- a misconfigured bot is the operator's
+    problem, and telling every authorized user is noise they can do nothing
+    about. Returns [] when no admin is identifiable, in which case the caller
+    should just log rather than fall back to telling everyone."""
     admins = set()
     notify = config.get("adminNotifyId")
     if notify:
