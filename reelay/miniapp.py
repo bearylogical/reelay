@@ -175,7 +175,12 @@ async def send_weekly_now(request):
     if not events:
         return web.json_response({"ok": False, "error": "nothing_this_week"})
     shim = types.SimpleNamespace(bot=request.app["bot"])
-    await digest.send_weekly_digest_to_scope(shim, scope, events)
+    delivered = await digest.send_weekly_digest_to_scope(shim, scope, events)
+    if not delivered:
+        # Don't mark a send that reached nobody -- doing so used to suppress
+        # the scheduled post later the same day, silently costing the week.
+        logger.warning(f"Scope {scope['chat_id']}: on-demand weekly digest reached nobody, not marking sent.")
+        return web.json_response({"ok": False, "error": "not_delivered"})
     db.markWeeklyDigestSent(scope["chat_id"], datetime.now().date().isoformat())
     return web.json_response({"ok": True})
 
@@ -603,8 +608,11 @@ def build_app(bot):
     app.router.add_post("/api/chat-requests/{chat_id}/deny", deny_chat_request)
     app.router.add_get("/api/open-chats", open_chats)
     app.router.add_post("/api/open-chats/{chat_id}/revoke", revoke_chat_request)
-    # Overseerr status events -> the scope's #updates topic.
+    # Library events -> recorded for the weekly digest. Each is a no-op (404)
+    # unless that service has a webhookSecret configured.
     app.router.add_post("/overseerr/webhook/{secret}", webhooks.handle_overseerr)
+    app.router.add_post("/radarr/webhook/{secret}", webhooks.handle_radarr)
+    app.router.add_post("/sonarr/webhook/{secret}", webhooks.handle_sonarr)
     return app
 
 

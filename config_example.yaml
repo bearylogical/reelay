@@ -20,6 +20,12 @@ sonarr:
     - telegram
   addRequesterIdTag: true # Add telegram user id as tag on series
   adminRestrictions: false
+  # Optional: feed Sonarr imports into the weekly digest, so shows that never
+  # went through Overseerr still show up. Pick any long random string, then in
+  # Sonarr → Settings → Connect → Webhook tick "On Import" (and optionally
+  # "On Series Add") with URL:
+  #   https://<your-reelay-host>/sonarr/webhook/<this-secret>
+  webhookSecret:
 
 # Radarr Configuration
 radarr:
@@ -43,6 +49,12 @@ radarr:
     - telegram
   addRequesterIdTag: true # Add telegram user id as tag on movie
   adminRestrictions: false
+  # Optional: feed Radarr imports into the weekly digest, so movies that never
+  # went through Overseerr still show up. Pick any long random string, then in
+  # Radarr → Settings → Connect → Webhook tick "On Import" (and optionally
+  # "On Movie Added") with URL:
+  #   https://<your-reelay-host>/radarr/webhook/<this-secret>
+  webhookSecret:
   
 # Telegram Configuration
 telegram:
@@ -97,10 +109,16 @@ miniapp:
   listenHost: 0.0.0.0
   listenPort: 8080
 
-# Weekly "what's new" digest. Records availability from the Overseerr webhook
-# (see overseerr.webhookSecret above) and, once a week, posts a library-wide
-# roundup into each group's #updates topic (set with /routehere updates) and
-# DMs each member the items they personally requested that went available.
+# Weekly "what's new" digest. Once a week it posts a library-wide roundup into
+# each group's #updates topic (set with /routehere updates) and DMs each member
+# the items they personally requested that went available.
+#
+# It records from every source you wire up -- the Overseerr webhook
+# (overseerr.webhookSecret), the Radarr/Sonarr webhooks (radarr.webhookSecret /
+# sonarr.webhookSecret), and reelay's own /start add flow -- and dedupes across
+# them, so anything added straight in Radarr/Sonarr still shows up. With no
+# webhook configured at all, only reelay's own adds are recorded.
+#
 # This only turns the feature on/off system-wide -- each group picks its own
 # day of week, hour, and on/off from the Mini App's Members tab.
 weeklyDigest:

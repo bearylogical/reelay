@@ -189,6 +189,22 @@ def test_send_weekly_now_admin_only_and_marks_sent():
     run_client(check)
 
 
+def test_send_weekly_now_without_updates_route_does_not_burn_the_week():
+    # Marking a send that reached nobody used to suppress the scheduled post
+    # later the same day, so a missing route cost the whole week silently.
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", "2", "a", role="admin", status="approved")
+    db.approveMembership("-100111", "2", approved_by="x", role="admin")
+    db.recordMediaEvent("The Matrix", "movie")  # note: no setChannelRoute
+
+    async def check(c):
+        r = await c.post("/api/weekly/send", headers={"X-Telegram-Init-Data": init_for(2, "a")})
+        d = await r.json()
+        assert r.status == 200 and d["ok"] is False and d["error"] == "not_delivered"
+        assert db.getScope("-100111")["weekly_digest_last_sent"] is None
+    run_client(check)
+
+
 def test_weekly_endpoint_returns_movie_tv_breakdown():
     db.upsertScope("-100111", title="Fam")
     db.upsertMembership("-100111", "1", "m", status="approved")
@@ -201,8 +217,11 @@ def test_weekly_endpoint_returns_movie_tv_breakdown():
         r = await c.get("/api/weekly", headers={"X-Telegram-Init-Data": init_for(1, "m")})
         d = await r.json()
         assert r.status == 200
-        assert d["counts"] == {"movie": 1, "tv": 1}
-        assert d["movies"] == ["The Matrix"] and d["tv"] == ["Severance"]
+        assert d["counts"] == {"movie": 1, "tv": 1, "other": 0}
+        assert [e["title"] for e in d["movies"]] == ["The Matrix"]
+        assert [e["title"] for e in d["tv"]] == ["Severance"]
+        assert d["added"] == [] and d["other"] == []
+        assert d["sourceCounts"] == {"overseerr": 2}
     run_client(check)
 
 
