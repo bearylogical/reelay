@@ -20,6 +20,27 @@ def _headers():
     return {"X-Api-Key": config["overseerr"]["apikey"]}
 
 
+def apiGet(path, timeout=15):
+    """Raw authenticated GET against Overseerr's API. Returns (data, error) --
+    exactly one of the two is set. Every other helper here deliberately
+    collapses unreachable/rejected/empty into one safe default; the diagnostics
+    self-test is the one caller that has to tell them apart."""
+    if not enabled():
+        return None, "Overseerr isn't enabled in config.yaml"
+    try:
+        resp = requests.get(f"{_base()}{path}", headers=_headers(), timeout=timeout)
+    except Exception as e:
+        return None, str(e)
+    if resp.status_code in (401, 403):
+        return None, f"HTTP {resp.status_code} — Overseerr rejected the API key"
+    if resp.status_code >= 400:
+        return None, f"HTTP {resp.status_code}"
+    try:
+        return resp.json(), None
+    except ValueError:
+        return None, "Overseerr returned a non-JSON response"
+
+
 def getRequests(filter=None, requested_by=None, take=50, max_items=None):
     """Raw Overseerr requests, across pages. `filter` is one of
     available/pending/processing/... ; `requested_by` restricts to a single
