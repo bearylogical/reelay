@@ -4,7 +4,7 @@ EXAMPLE ?= config_example.yaml
 MIGRATE = $(PYTHON) -m reelay.config_migrate --config $(CONFIG) --example $(EXAMPLE)
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint run config-init config-check config-diff config-migrate \
+.PHONY: help install test lint run miniapp-dev config-init config-check config-diff config-migrate \
         up down logs
 
 help: ## Show this help
@@ -24,6 +24,9 @@ lint: ## Byte-compile every module (same check CI runs)
 
 run: config-check ## Run the bot (refuses if config.yaml is missing required keys)
 	$(PYTHON) -m reelay
+
+miniapp-dev: ## Serve the Mini App UI at http://127.0.0.1:8081/miniapp/ (no Telegram, no token)
+	$(PYTHON) -m reelay.miniapp_dev $(ARGS)
 
 ## --- config migrations -------------------------------------------------
 ##

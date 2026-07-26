@@ -324,13 +324,50 @@ async def askReminderThreshold(update, context):
 
 
 async def askReminderThresholdFor(context, telegram_user_id):
+    """Ask with buttons for the common answers, and say that any number still
+    works. Onboarding's only free-text question was a dead stop on a phone --
+    "reply with a number of days" in a chat that has otherwise been all taps.
+    catchReminderThresholdReply still handles a typed answer, so nothing is
+    lost by tapping neither."""
+    keyboard = [
+        [
+            InlineKeyboardButton(i18n.t("reelay.Onboarding.ReminderOff"), callback_data="remdays_0"),
+            InlineKeyboardButton(i18n.t("reelay.Onboarding.Reminder3"), callback_data="remdays_3"),
+        ],
+        [
+            InlineKeyboardButton(i18n.t("reelay.Onboarding.Reminder7"), callback_data="remdays_7"),
+            InlineKeyboardButton(i18n.t("reelay.Onboarding.Reminder14"), callback_data="remdays_14"),
+        ],
+    ]
     try:
         await context.bot.send_message(
             chat_id=telegram_user_id,
-            text=i18n.t("reelay.Onboarding.AskReminderDays"),
+            text=i18n.t("reelay.Onboarding.AskReminderDays") + "\n\n"
+                 + i18n.t("reelay.Onboarding.AskReminderDaysHint"),
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
     except Exception:
         logger.warning(f"Could not DM {telegram_user_id} the onboarding reminder question.")
+
+
+async def handleReminderDaysChoice(update, context):
+    """Callback for the remdays_<n> buttons. Applies to whichever of this
+    user's memberships are still awaiting an answer -- the same rule the typed
+    reply uses, so tapping and typing can't disagree."""
+    query = update.callback_query
+    days = int(query.data.split("_", 1)[1])
+    # Falling back to every approved membership matters for a late tap: once
+    # the question is answered nothing is "awaiting" any more, and a button
+    # that reports "Got it" while writing nothing would be a lie.
+    pending = (db.getMembershipsAwaitingReminderAnswer(query.from_user.id)
+               or db.getApprovedMemberships(query.from_user.id))
+    for m in pending:
+        db.setReminderThreshold(m["scope_chat_id"], query.from_user.id, days)
+    await query.answer()
+    if days == 0:
+        await query.edit_message_text(i18n.t("reelay.Onboarding.ReminderDisabled"))
+    else:
+        await query.edit_message_text(i18n.t("reelay.Onboarding.ReminderSet", days=days))
 
 
 async def catchReminderThresholdReply(update, context):
@@ -429,7 +466,10 @@ async def handleAnonymizeChoice(update, context):
     whichever of this user's memberships are still awaiting an answer."""
     query = update.callback_query
     hide_name = query.data == "anon_yes"
-    pending = db.getMembershipsAwaitingAnonymizeAnswer(query.from_user.id)
+    # See handleReminderDaysChoice: a tap on an already-answered picker must
+    # still take effect rather than report success and write nothing.
+    pending = (db.getMembershipsAwaitingAnonymizeAnswer(query.from_user.id)
+               or db.getApprovedMemberships(query.from_user.id))
     for m in pending:
         db.setAnonymizeRequests(m["scope_chat_id"], query.from_user.id, hide_name)
 

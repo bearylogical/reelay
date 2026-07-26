@@ -79,6 +79,13 @@ grew into a group-native, Overseerr-first bot with its own architecture.
   Radarr still shows up. Once a week it posts a library-wide roundup into
   `#updates` (split into what's watchable now and what's coming soon) and DMs
   each member the items **they** requested that went live.
+- **Commands that introduce themselves.** Reelay publishes Telegram's `/`
+  command menu on every start — one list for DMs, another for groups — so the
+  commands are discoverable without reading this file. (It sets them via the
+  API, so it replaces whatever you typed into BotFather's `/setcommands`.)
+  `/help` itself is assembled per caller: a member isn't shown admin commands,
+  a group isn't shown DM-only ones, and a download client that's switched off
+  isn't advertised.
 - **Group-safe inline keyboards, `/switch` for multi-group DMs, and the original
   Sonarr/Radarr list + Transmission/Sabnzbd speed controls.**
 
@@ -179,6 +186,53 @@ make run                             # config-check, then python -m reelay
 
 `make` on its own lists every target.
 
+### Working on the Mini App without Telegram
+
+The Mini App normally can't be opened in a browser: Telegram signs an
+`initData` blob with the bot token and the page sends it on every request, so
+without it every endpoint 401s and you get *"Couldn't load. missing initData"*.
+Waiting on a tunnel and a phone to change one CSS rule is no way to work, so
+there's a dev server:
+
+```bash
+make miniapp-dev
+```
+
+That serves the real UI and the real API at <http://127.0.0.1:8081/miniapp/>,
+with **no bot token, no tunnel and no Telegram**. It:
+
+- seeds a throwaway scope, one member per role, a pending join, a chat-access
+  request and a week of library events into **`reelay-dev.db`** — your real
+  `reelay.db` is never touched;
+- fakes Overseerr/Radarr/Sonarr, so requests, the queue, search and the
+  connection self-test all render believable data with none of them running;
+- prints anything the bot would have sent to Telegram (join approvals, request
+  announcements, the weekly digest) to the console instead;
+- marks the page with a **dev mode · auth bypassed** badge, so a dev tab can't
+  be mistaken for the real thing.
+
+Useful flags (`make miniapp-dev ARGS="…"`, or run the module directly):
+
+| Flag | What it does |
+|---|---|
+| `--role member\|editor\|admin` | Browse as that role. Role filtering is *not* bypassed — as a `member` the Queue and Members tabs stay hidden and their endpoints still 403, so you see what that role really sees |
+| `--live` | Use the real Overseerr/Radarr/Sonarr from `config.yaml` instead of fakes. Requests you submit are then real |
+| `--port` / `--host` | Defaults `8081` / `127.0.0.1` |
+| `--no-seed` | Don't write demo data |
+
+Under the hood this is one environment variable, `REELAY_MINIAPP_DEV=1`, which
+makes the Mini App server accept a request carrying *no* initData by acting as
+a member from the database (`REELAY_MINIAPP_DEV_USER`, else the first approved
+admin). You can set it on the real bot too, to click through the UI against
+your live data. Two things to know before you do:
+
+- Signed initData is still verified. Dev mode only fills the gap where a
+  browser sent none, so a forged blob can't ride in on it.
+- It is an env var, never a `config.yaml` key, precisely because `config.yaml`
+  is the file that gets copied to servers. With it set, the whole Mini App API
+  is unauthenticated — the bot logs a warning on every start, and you should
+  not expose that port.
+
 ---
 
 ## Architecture
@@ -204,6 +258,7 @@ run on python-telegram-bot's `JobQueue`.
 | `webhooks.py` | Overseerr/Radarr/Sonarr webhook receivers (record library events for the digest) |
 | `diagnostics.py` | Read-only connection self-test of the Overseerr → Radarr/Sonarr chain (Members tab → Connections) |
 | `miniapp.py` | aiohttp server, initData auth; dashboard/queue/catalog/request API; admin API for members, roles, invite code, join policy, feature flags, chat-access requests, and the connection self-test; Plex linking API |
+| `miniapp_dev.py` | Dev-only: serves the Mini App in a plain browser with seeded data and faked services ([above](#working-on-the-mini-app-without-telegram)) |
 | `add.py`* / `delete.py` / `listing.py` / `transmission.py` / `sabnzbd.py` | Conversation flows |
 
 \* the add flow currently lives in `bot.py`.

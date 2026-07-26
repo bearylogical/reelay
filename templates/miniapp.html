@@ -23,6 +23,11 @@
   header { padding: 14px 16px 8px; }
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header .sub { color: var(--hint); font-size: 13px; margin-top: 2px; }
+  /* Only ever visible when the server is serving unsigned requests, so it's
+     meant to be impossible to mistake this tab for the real thing. */
+  .dev-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+    background: #b3541e; color: #fff; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 16px 4px; }
   .chip { background: var(--card); border-radius: 14px; padding: 5px 10px; font-size: 12px; color: var(--hint); }
   .chip b { color: var(--text); }
@@ -82,6 +87,7 @@
   <header>
     <h1 id="scopeTitle">Reelay</h1>
     <div class="sub" id="sub"></div>
+    <div class="dev-badge" id="devBadge" style="display:none">dev mode · auth bypassed</div>
   </header>
 
   <div class="panel active" id="p-requests">
@@ -188,14 +194,29 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const tg = window.Telegram.WebApp;
+// Telegram's SDK still defines window.Telegram.WebApp in a plain browser, but
+// its initData is empty and anything that round-trips through the Telegram
+// client (showConfirm, openLink, haptics) never calls back -- a confirm dialog
+// would hang forever. So outside Telegram we swap in browser equivalents and
+// let the server's dev mode supply the identity. See reelay/miniapp_dev.py.
+const TG = (window.Telegram || {}).WebApp;
+const inTelegram = !!(TG && TG.initData);
+const tg = inTelegram ? TG : {
+  initData: "",
+  ready() {}, expand() {},
+  openLink(url) { window.open(url, "_blank", "noopener"); },
+  showConfirm(msg, cb) { cb(window.confirm(msg)); },
+};
 tg.ready(); tg.expand();
 
 const H = s => (s == null ? "" : String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
 const el = id => document.getElementById(id);
 
 async function api(path, opts = {}) {
-  opts.headers = Object.assign({ "X-Telegram-Init-Data": tg.initData }, opts.headers || {});
+  // Header omitted rather than sent empty outside Telegram: an empty initData
+  // is not a signature the server should try (and log a failure) to verify.
+  const auth = tg.initData ? { "X-Telegram-Init-Data": tg.initData } : {};
+  opts.headers = Object.assign(auth, opts.headers || {});
   const r = await fetch(path, opts);
   if (!r.ok) throw new Error(await r.text().catch(() => r.status));
   return r.json();
@@ -716,13 +737,22 @@ el("q").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer
     const data = await api("/api/bootstrap");
     el("scopeTitle").textContent = data.scopeTitle;
     el("sub").textContent = `${data.displayName} · ${data.role}${data.linked ? "" : " · not linked"}`;
+    if (data.devMode) el("devBadge").style.display = "";
     if (data.canSeeQueue) el("tab-queue").style.display = "";
     if (data.role === "admin") el("tab-members").style.display = "";
     renderRequests(data);
     renderAccount(data);
     loadWeekly();
   } catch (e) {
-    document.body.innerHTML = `<div class="empty">Couldn't load. ${H(String(e.message || e))}</div>`;
+    // The failure people actually hit is "opened outside Telegram with no dev
+    // mode on", and the raw text ("missing initData") doesn't say what to do
+    // about it -- so say it here rather than in a wiki nobody reads.
+    const detail = H(String(e.message || e));
+    const hint = inTelegram ? "" :
+      `<p>This page was opened outside Telegram, so there's no signed session.
+        Start it with <code>make miniapp-dev</code> to browse it here.</p>`;
+    document.body.innerHTML =
+      `<div class="empty"><p>Couldn't load. ${detail}</p>${hint}</div>`;
   }
 })();
 </script>
