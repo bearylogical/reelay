@@ -7,6 +7,7 @@ dist/
 # runtime / user data
 config.yaml
 reelay.db
+reelay-dev.db
 logs/
 *.log
 chatid.txt

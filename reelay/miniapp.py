@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json as jsonlib
 import logging
+import os
 import time
 import types
 import urllib.parse
@@ -43,6 +44,11 @@ DASHBOARD_REQUEST_LIMIT = 20  # bound title-resolution latency on load
 _pending_pins = {}
 PLEX_PIN_TTL = 600
 
+# Dev-only: accept unsigned requests so the UI can be opened in a plain
+# browser. Env vars, never config.yaml keys -- see dev_mode() below.
+DEV_MODE_ENV = "REELAY_MINIAPP_DEV"
+DEV_USER_ENV = "REELAY_MINIAPP_DEV_USER"
+
 
 def enabled():
     return bool(config.get("miniapp", {}).get("enable") and config["miniapp"].get("url"))
@@ -62,6 +68,56 @@ def verify_telegram_init_data(init_data_raw, bot_token):
     except Exception:
         logger.warning("initData HMAC verification error", exc_info=True)
         return False
+
+
+def _truthyEnv(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def dev_mode():
+    """Whether unsigned (non-Telegram) requests are accepted as a real member.
+
+    Opening the Mini App in an ordinary browser means there is no signed
+    initData, so every endpoint 401s and the page renders "Couldn't load" --
+    which makes UI work impossible without a phone and a tunnel. This is the
+    escape hatch, and it is deliberately an environment variable rather than a
+    config.yaml key: config.yaml is the file that gets copied to the server,
+    an env var set in a dev shell is not. See reelay/miniapp_dev.py.
+    """
+    return _truthyEnv(DEV_MODE_ENV)
+
+
+def _dev_user_id():
+    """Which Telegram user an unsigned dev request acts as: whoever
+    REELAY_MINIAPP_DEV_USER names, else the first approved admin in the DB, so
+    a seeded dev database works without anyone typing an id."""
+    explicit = os.environ.get(DEV_USER_ENV, "").strip()
+    if explicit:
+        return explicit
+    for scope in db.getActiveScopes():
+        admins = db.getApprovedAdmins(scope["chat_id"])
+        if admins:
+            return str(admins[0]["user_id"])
+    return None
+
+
+def _dev_authed(request):
+    """The dev-mode counterpart of _authed(): same (user_id, scope, membership,
+    tg_user) contract, but the identity comes from the environment instead of a
+    signature. Role filtering downstream is untouched -- a dev user mapped to a
+    `member` membership still gets 403 on /api/queue, so what you see in the
+    browser is what that role really sees."""
+    user_id = _dev_user_id()
+    if not user_id:
+        logger.error(f"Mini App dev mode ({request.path}): no approved member in the database to act as. "
+                     f"Seed one (python -m reelay.miniapp_dev --seed) or set {DEV_USER_ENV}.")
+        raise web.HTTPUnauthorized(text="dev mode: no member to act as")
+    scope, membership = _resolve_scope_for_user(user_id)
+    if not membership or membership["status"] != "approved":
+        logger.error(f"Mini App dev mode ({request.path}): {user_id} is not an approved member of any active scope.")
+        raise web.HTTPForbidden(text=f"dev mode: {user_id} is not an approved member")
+    logger.debug(f"Mini App dev mode: serving {request.path} as {user_id} (role={membership['role']})")
+    return str(user_id), scope, membership, {"id": user_id, "username": membership.get("username") or f"dev{user_id}"}
 
 
 def parse_user(init_data_raw):
@@ -92,6 +148,10 @@ def _authed(request):
     rejection is logged here rather than duplicated at each call site."""
     raw = request.headers.get("X-Telegram-Init-Data") or request.query.get("initData")
     if not raw:
+        # Signed initData always wins; dev mode only fills the gap where there
+        # is none, so a real Telegram client is never served a fake identity.
+        if dev_mode():
+            return _dev_authed(request)
         logger.warning(f"Mini App auth rejected ({request.path}): missing initData, remote={request.remote}")
         raise web.HTTPUnauthorized(text="missing initData")
     if not verify_telegram_init_data(raw, config["telegram"]["token"]):
@@ -142,6 +202,7 @@ async def bootstrap(request):
         "seerrUsername": link["seerr_username"] if link else None,
         "overseerrEnabled": overseerr.enabled(),
         "canSeeQueue": role in ("editor", "admin"),
+        "devMode": dev_mode(),
         "counts": counts,
         "requests": reqs,
     })
@@ -636,6 +697,14 @@ async def start_server(application):
     Runs when the Mini App or the Overseerr webhook receiver is enabled."""
     if not (enabled() or webhooks.enabled()):
         return
+    if dev_mode():
+        # Loud, and on every start: this turns the whole Mini App API into an
+        # unauthenticated one. It belongs in a dev shell, never in the unit
+        # file or compose environment of a bot reachable from the internet.
+        logger.warning(
+            f"{DEV_MODE_ENV} is set — Mini App requests without Telegram initData are being served as a real "
+            "member. Unset it before exposing this bot publicly."
+        )
     app = build_app(application.bot)
     runner = web.AppRunner(app)
     await runner.setup()

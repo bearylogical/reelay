@@ -23,82 +23,127 @@ en-us:
   Season: Season
   Select all seasons: Select all seasons
   Deselect all seasons: Deselect all seasons
-  Chatid added: "This chat is successfully added to the list of allowed chats. Now you can start using this bot. \nIf you entered a command, you need to execute it again."
-  NotAdmin: "You need to be an admin to execute this command."
-  Chatid already allowed: "This chat is already authorized."
-  Help: "Want to see this text again? Use /%{help}.
-    \n• To authenticate before first use you should use /%{authenticate}.
-    \n• To add a movie or series use /%{add}.
-    \n• To delete a movie or series use /%{delete}.
-    \n• To immediately add a movie or series you can use /%{movie} or /%{serie}.
-    \n• To check which series are in Sonarr you can use /%{allSeries}.
-    \n• To check which movies are in Radarr you can use /%{allMovies}.
-    \n• To toggle the up- and download speed of Transmission use /%{transmission}.
-    \n• To change the up- and download speed of Sabnzbd use /%{sabnzbd}."
+  Chatid added: "✅ An admin approved this chat — you can use Reelay here now. \nIf you were part-way through a command, send it again."
+  NotAdmin: "That's an admin-only command. Ask an admin of your group to run it."
+  Chatid already allowed: "This chat already has access — go ahead."
+  # /help is assembled section by section in bot.py so it only ever lists what
+  # this user can actually do here: a member doesn't see admin commands, a
+  # group doesn't see DM-only ones, and a disabled service isn't advertised.
+  Help:
+    Header: "🎬 Reelay — request movies and shows for the group, and I'll tell you when they're ready."
+    Requesting: "Requesting
+      \n/%{add} — search for something and request it
+      \n/app — dashboard: your requests, search, downloads, account"
+    Account: "You
+      \n/linkme — link your Plex/Overseerr account so requests are yours
+      \n/remindme <days> — nudge me if I don't watch something (0 = never)
+      \n/anonymize on|off — hide or show your name on group request posts"
+    Groups: "Groups
+      \n/join <code> — join a group using its invite code
+      \n/switch — choose which group you're acting in"
+    Library: "Library
+      \n/%{delete} — remove a movie or show
+      \n/%{allSeries} — what Sonarr already has
+      \n/%{allMovies} — what Radarr already has"
+    Downloads: "Downloads
+      \n%{lines}"
+    TransmissionLine: "/%{transmission} — toggle Transmission's speed limit"
+    SabnzbdLine: "/%{sabnzbd} — set Sabnzbd's speed limit"
+    Admin: "Admin
+      \n/requestlink — nudge members who haven't linked a Plex account
+      \n/routehere requests|updates — post that category in this topic
+      \n/routes · /unroute <category> — see or clear routing
+      \nMembers, roles, the invite code and the digest schedule live in /app → Members."
+    GroupHeader: "🎬 Reelay here in %{title}."
+    GroupUnclaimed: "I'm not activated in this group yet — a Telegram admin sends /claim here to do that."
+    GroupRequestsOff: "Requests happen in a DM with me: tap my name, then /join with this group's invite code. (An admin can turn on requests in the group from /app → Members.)"
+    GroupRequestsOn: "/%{add} — request something right here. /app opens your dashboard."
+    Footer: "/%{help} shows this again."
   Missing config: "You are missing the following configkeys in your config.yaml-file: %{missingKeys}.
     \nAdd these before restarting the bot, or run `make config-migrate` to add them automatically."
   Wrong values: "The following configkeys has a wrong value in your config.yaml-file: %{wrongValues}.
     \nChange these before restarting the bot."
-  NotYourRequest: "This isn't your request 🙂"
+  NotYourRequest: "Those buttons belong to someone else's request 🙂 — send /%{add} to start your own."
 
   ChatAccess:
-    Requested: "This chat isn't authorized yet. I've let an admin know — you'll be able to use this once it's approved from the Mini App."
-    StillPending: "Still waiting on an admin to approve this chat from the Mini App."
-    AdminNotify: "🔐 %{name} (chat %{chat_id}) wants access to Reelay. Review it in the Mini App's Members tab."
-    Denied: "This chat's access request was denied."
-    Revoked: "This chat's access to Reelay has been revoked by an admin."
+    Requested: "This chat can't use Reelay yet. I've asked the admins to approve it — I'll message you here as soon as one does, and then you can run your command again."
+    StillPending: "Your request is already with the admins; nothing more to do but wait. I'll message you here when it's decided."
+    AdminNotify: "🔐 %{name} (chat %{chat_id}) wants access to Reelay. Approve or deny it in /app → Members."
+    Denied: "An admin turned down this chat's access request. If that's a surprise, ask them directly."
+    Revoked: "An admin has revoked this chat's access to Reelay."
 
   GroupMode:
-    Activated: "✅ %{name} is now an Reelay admin for this group. Invite code: %{code}. Members can join from a DM with /join %{code}."
-    NeedsClaim: "I've been added, but whoever added me isn't a Telegram admin of this group. An existing group admin should run /claim here to activate Reelay."
-    ClaimGroupOnly: "/claim only works inside the group you want to activate."
-    ClaimNotAdmin: "You need to be a Telegram admin of this group to claim Reelay here."
-    WelcomeNewMember: "👋 %{name}, to send requests DM me [here](%{link})."
+    Activated: "✅ %{name} is now a Reelay admin for this group.
+      \n\nInvite code: %{code}
+      \nShare it — members DM me `/join %{code}` to get in.
+      \n\nNext: /app opens your dashboard, where you approve members and set everything else up."
+    NeedsClaim: "👋 I'm in, but I don't know who runs this group yet — whoever added me isn't a Telegram admin here.
+      \nAny Telegram admin of this group: send /claim in this chat to activate me."
+    ClaimGroupOnly: "/claim has to be sent inside the group you want to activate, not here."
+    ClaimNotAdmin: "Only a Telegram admin of this group can claim Reelay here. Ask one of them to send /claim."
+    WelcomeNewMember: "👋 %{name}, I take movie and TV requests for this group.
+      \nDM me [here](%{link}) and send `/join %{code}` to get started."
     SwitchDmOnly: "/switch only works in a private chat with me."
-    OnlyOneScope: "You're only in one group (%{title}), nothing to switch to."
-    SwitchPrompt: "Which group do you want to act in?"
-    SwitchedTo: "Switched to %{title}."
+    OnlyOneScope: "You're only in one group (%{title}), so there's nothing to switch to."
+    SwitchPrompt: "Which group do you want to act in? Requests and settings apply to whichever you pick."
+    SwitchedTo: "Switched to %{title}. Requests you make now go to that group."
+    SwitchedToDefault: "You're in more than one group, so I've assumed %{title} for now. Use /switch to change it."
 
   Onboarding:
-    JoinDmOnly: "This only works in a private chat with me."
-    JoinUsage: "Usage: /join <code>"
-    JoinBadCode: "I don't recognize that invite code."
-    JoinPending: "Thanks! Your request to join %{title} is waiting on an admin's approval."
-    JoinApproved: "You're in %{title}! 🎉"
+    JoinDmOnly: "That one only works in a private chat with me — tap my name and send it there."
+    JoinUsage: "Send /join followed by your group's invite code, like: /join ABCD2345
+      \nAn admin of the group can get the code from their dashboard (/app → Members)."
+    JoinBadCode: "That invite code isn't one of mine — codes are 8 characters, no O/0 or I/1.
+      \nCheck it with whoever invited you; they can also generate a fresh one from /app → Members."
+    JoinPending: "Thanks! Your request to join %{title} is with the admins now — I'll message you the moment it's approved."
+    JoinApproved: "You're in %{title}! 🎉
+      \nTwo quick questions next, then /app opens your dashboard."
     Approve: "✅ Approve"
     Deny: "🚫 Deny"
     ApprovalRequest: "%{name} wants to join %{title}."
-    RequestGone: "That request no longer exists."
+    RequestGone: "That request no longer exists — someone may have handled it already."
     Approved: "Approved %{name}."
     Denied: "Denied %{name}."
-    NoMembership: "You're not an approved member of any group yet. Use /join <code> first."
-    AskReminderDays: "One more thing — if you request something and don't watch it, want me to remind you? Reply with a number of days (e.g. 3), or 0 to never remind you."
-    ReminderDaysInvalid: "Please reply with a whole number between 0 and 30."
-    ReminderDisabled: "Got it, I won't send watch reminders."
-    ReminderSet: "Got it, I'll check in after %{days} day(s) if you haven't watched something."
-    RemindmeUsage: "Usage: /remindme <days> (0 to disable)"
-    ReminderNudge: "⏳ You requested %{title} a while ago — still haven't watched it?"
-    LinkPrompt: "Which Overseerr/Plex account is %{name}? Pick one so I can attribute their requests and track what they've watched."
+    NoMembership: "You're not in a group with me yet. Ask whoever runs yours for the invite code, then send /join <code>."
+    AskReminderDays: "1 of 2 — if you request something and never get round to watching it, should I check in?
+      \n(I won't nudge you about anything you've already watched.)"
+    AskReminderDaysHint: "Pick one, or reply with any number of days from 0 to 30."
+    ReminderOff: "🔕 Never"
+    Reminder3: "3 days"
+    Reminder7: "7 days"
+    Reminder14: "14 days"
+    ReminderDaysInvalid: "I need a whole number of days between 0 and 30 — for example 3, or 0 to switch reminders off."
+    ReminderDisabled: "Got it, no watch reminders. Change your mind any time with /remindme <days>."
+    ReminderSet: "Got it — if something you requested is still unwatched after %{days} day(s), I'll check in. Change it with /remindme <days>."
+    RemindmeUsage: "Send /remindme followed by a number of days, like: /remindme 3
+      \nUse /remindme 0 to switch watch reminders off."
+    ReminderNudge: "⏳ %{title} has been ready for a while and you asked for it — still planning to watch?
+      \n(/remindme 0 turns these off.)"
+    LinkPrompt: "Which Overseerr/Plex account is %{name}? Picking it means their requests show up under their own name, and I can tell what they've already watched."
     LinkSkip: "⏭ Skip for now"
-    LinkSkipped: "No problem — you can link later with /linkme."
-    LinkDone: "🔗 Linked to %{account}."
-    LinkNoOverseerr: "Overseerr isn't configured, so there's nothing to link to."
-    RoleChanged: "Your role in %{title} is now %{role}."
-    Removed: "You've been removed from %{title}."
-    RequestLinkPrompt: "Who should I ask to link their Plex/Overseerr account in %{title}?"
+    LinkSkipped: "No problem — /linkme whenever you're ready, or do it yourself from /app → Account."
+    LinkDone: "🔗 Linked to %{account}. Requests will be attributed to that account from now on."
+    LinkNoOverseerr: "There's no Overseerr set up on this bot, so there's no account to link to. Nothing you need to do."
+    RoleChanged: "Your role in %{title} is now %{role}.
+      \n· member — request things and see your own requests
+      \n· editor — also sees the live download queue
+      \n· admin — also manages members, routing and settings"
+    Removed: "You've been removed from %{title}. Your requests already in Overseerr aren't affected."
+    RequestLinkPrompt: "These members of %{title} haven't linked a Plex/Overseerr account yet, so their requests aren't attributed to them. Who should I nudge?"
     RequestLinkAllButton: "🔔 Ask everyone (%{count})"
     RequestLinkNoneUnlinked: "Everyone in %{title} already has their Plex account linked. 🎉"
     RequestLinkSent: "🔔 Asked %{name} to link their Plex account."
     RequestLinkSentAll: "🔔 Asked %{count} member(s) to link their Plex account."
-    RequestLinkFailed: "Couldn't message %{name} — they may need to start a chat with me first."
-    LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account so I can attribute your requests and track what you've watched."
-    AskAnonymize: "Last thing — when you request something, should I show your name in the group's request feed, or keep it anonymous?"
-    AskAnonymizeLegacy: "🔒 New: you can now choose whether your name shows up when you request something in the group. Should I show your name, or keep it anonymous?"
+    RequestLinkFailed: "Couldn't message %{name} — Telegram only lets me DM people who've messaged me first. Ask them to open a chat with me and send /linkme."
+    LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account.
+      \nIt takes one tap and means your requests show up as yours — and that I won't nag you about something you've already watched."
+    AskAnonymize: "2 of 2 — when you request something, the group gets a heads-up. Should that say it was you?"
+    AskAnonymizeLegacy: "🔒 New setting: you can now choose whether your name shows up when you request something in the group. Which do you want?"
     AnonShowName: "🙂 Show my name"
     AnonKeepPrivate: "🙈 Keep me anonymous"
-    AnonSetShown: "Got it, I'll show your name on requests."
-    AnonSetHidden: "Got it, I'll keep your requests anonymous."
-    AnonymizeUsage: "Usage: /anonymize on|off"
+    AnonSetShown: "Got it, requests will be posted with your name. Change it any time with /anonymize on."
+    AnonSetHidden: "Got it, your requests will be posted anonymously. Change it any time with /anonymize off."
+    AnonymizeUsage: "Send /anonymize on to hide your name on group request posts, or /anonymize off to show it."
 
   messages:
     Add: Yes, add this %{subject}
@@ -117,10 +162,11 @@ en-us:
     other: "%{count} search results"
 
   Overseerr:
-    Requested: "✅ Requested %{title} — you'll get a heads-up when it's ready to watch."
-    RequestFailed: "⚠️ Couldn't submit your request for %{title} right now. Please try again later."
-    NotLinked: "I don't know your Overseerr/Plex account yet. Link it with /linkme, then try again."
-    NoScope: "You're not set up in a group yet. Ask an admin for an invite, or /join a group first."
+    Requested: "✅ Requested %{title} — I'll message you when it's ready to watch. Track it any time in /app."
+    RequestFailed: "⚠️ Overseerr wouldn't take the request for %{title} just now. Worth another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+    NotLinked: "Before you can request, I need to know which Plex/Overseerr account is yours — otherwise the request has no one's name on it.
+      \nSend /linkme, or do it yourself in /app → Account, then try again."
+    NoScope: "You're not in a group with me yet, so there's nowhere to send this. Ask whoever runs yours for the invite code, then send /join <code>."
 
   Updates:
     Connected: "🔔 Overseerr webhook connected — the weekly what's-new will appear here."
@@ -133,8 +179,9 @@ en-us:
     More: "…and %{count} more"
 
   MiniApp:
-    NotEnabled: "The Mini App isn't enabled on this bot."
-    Prompt: "Open your Reelay dashboard:"
+    NotEnabled: "There's no dashboard on this bot — whoever runs it needs to set `miniapp.enable` and `miniapp.url` in config.yaml (it needs a public HTTPS address).
+      \nEverything still works from chat in the meantime: /start to request, /help for the rest."
+    Prompt: "Your dashboard: requests, search, downloads and your account, all in one place."
     Open: "📱 Open Reelay"
     MenuButton: "Reelay"
 
@@ -179,7 +226,7 @@ en-us:
     Start: The user %{first_name} with chat_id %{chat_id} has started a new request.
     AddSuccess: The %{subjectWithArticle} %{title} of user %{first_name} with chat_id %{chat_id} has been added.
     AddFailed: Error when adding the %{subjectWithArticle} %{title} of the user %{first_name} with chat_id %{chat_id}.
-    Exist: The %{subjectWithArticle} %{title} that the user %{first_name} with chat_id %{c.hat_id} wanted to add already exists.
+    Exist: The %{subjectWithArticle} %{title} that the user %{first_name} with chat_id %{chat_id} wanted to add already exists.
     Delete: The user %{first_name} with chat_id %{chat_id} has initiated a new deletion.
     RequestsDisabledInGroup: Requests are turned off in this group. Please message me directly instead.
     RequestsDisabledButton: Message me privately

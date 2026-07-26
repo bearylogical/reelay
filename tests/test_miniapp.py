@@ -497,3 +497,84 @@ def test_diagnostics_admin_only():
             d = await r.json()
             assert r.status == 200 and d == report
     run_client(check)
+
+
+# --- Dev mode -------------------------------------------------------------------
+#
+# The browser-only escape hatch (REELAY_MINIAPP_DEV). The first test is the
+# important one: with the env var unset, nothing about the auth path changes.
+
+
+def _seed_scope_with(role, uid="1", uname="a"):
+    db.upsertScope("-100111", title="Fam")
+    db.upsertMembership("-100111", uid, uname, role=role, status="approved")
+    db.approveMembership("-100111", uid, approved_by="x", role=role)
+
+
+def test_dev_mode_off_by_default(monkeypatch):
+    monkeypatch.delenv(miniapp.DEV_MODE_ENV, raising=False)
+    _seed_scope_with("admin")
+    assert miniapp.dev_mode() is False
+
+    async def check(c):
+        r = await c.get("/api/bootstrap")
+        assert r.status == 401
+    run_client(check)
+
+
+def test_dev_mode_serves_unsigned_request(monkeypatch):
+    monkeypatch.setenv(miniapp.DEV_MODE_ENV, "1")
+    monkeypatch.setenv(miniapp.DEV_USER_ENV, "1")
+    _seed_scope_with("admin")
+
+    async def check(c):
+        with patch("reelay.overseerr.enabled", return_value=False):
+            r = await c.get("/api/bootstrap")
+            d = await r.json()
+            assert r.status == 200
+            assert d["role"] == "admin" and d["devMode"] is True
+    run_client(check)
+
+
+def test_dev_mode_still_enforces_role(monkeypatch):
+    """The bypass supplies an identity, not a promotion -- a dev user mapped to
+    a `member` still sees exactly what a member sees."""
+    monkeypatch.setenv(miniapp.DEV_MODE_ENV, "1")
+    monkeypatch.setenv(miniapp.DEV_USER_ENV, "1")
+    _seed_scope_with("member")
+
+    async def check(c):
+        assert (await c.get("/api/queue")).status == 403
+        assert (await c.get("/api/members")).status == 403
+    run_client(check)
+
+
+def test_dev_mode_does_not_weaken_signed_requests(monkeypatch):
+    """initData that IS present must still verify -- dev mode only fills the
+    gap where a browser sent none, so a forged blob can't ride in on it."""
+    monkeypatch.setenv(miniapp.DEV_MODE_ENV, "1")
+    monkeypatch.setenv(miniapp.DEV_USER_ENV, "1")
+    _seed_scope_with("admin")
+    forged = init_for(1, "a")[:-1] + "0"
+
+    async def check(c):
+        r = await c.get("/api/bootstrap", headers={"X-Telegram-Init-Data": forged})
+        assert r.status == 401
+    run_client(check)
+
+
+def test_dev_user_defaults_to_first_admin(monkeypatch):
+    monkeypatch.setenv(miniapp.DEV_MODE_ENV, "1")
+    monkeypatch.delenv(miniapp.DEV_USER_ENV, raising=False)
+    _seed_scope_with("admin", uid="777", uname="boss")
+    assert miniapp._dev_user_id() == "777"
+
+
+def test_dev_mode_without_any_member(monkeypatch):
+    monkeypatch.setenv(miniapp.DEV_MODE_ENV, "1")
+    monkeypatch.delenv(miniapp.DEV_USER_ENV, raising=False)
+
+    async def check(c):
+        r = await c.get("/api/bootstrap")
+        assert r.status == 401  # nothing to act as; say so rather than inventing a user
+    run_client(check)

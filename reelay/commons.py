@@ -271,7 +271,7 @@ async def guardCallbackOwner(update, context):
     owner = owners.get(query.message.message_id)
     if owner is not None and owner[0] == update.effective_user.id:
         return True
-    await query.answer(i18n.t("reelay.NotYourRequest"), show_alert=True)
+    await query.answer(i18n.t("reelay.NotYourRequest", add=config["entrypointAdd"]), show_alert=True)
     return False
 
 
@@ -301,6 +301,6 @@ async def resolveScope(update, context):
     db.setActiveScope(update.effective_user.id, chosen)
     await context.bot.send_message(
         chat_id=update.effective_user.id,
-        text=i18n.t("reelay.SwitchedTo", title=memberships[0]["scope_title"]),
+        text=i18n.t("reelay.GroupMode.SwitchedToDefault", title=memberships[0]["scope_title"]),
     )
     return db.getScope(chosen)

@@ -5,8 +5,9 @@ import re
 
 from datetime import datetime, timedelta, time as dtime
 
-from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp,
-                      Update, WebAppInfo)
+from telegram import (BotCommand, BotCommandScopeAllGroupChats,
+                      BotCommandScopeAllPrivateChats, InlineKeyboardButton,
+                      InlineKeyboardMarkup, MenuButtonWebApp, Update, WebAppInfo)
 import telegram
 from telegram.constants import ChatMemberStatus, ParseMode
 from telegram.ext import (CallbackQueryHandler, ChatMemberHandler, CommandHandler,
@@ -171,6 +172,9 @@ async def onMemberChatMemberUpdate(update, context):
             "reelay.GroupMode.WelcomeNewMember",
             name=user.username or user.first_name or str(user.id),
             link=f"https://t.me/{context.bot.username}",
+            # Without the code the welcome is a dead end: the member opens the
+            # DM and has nothing to send.
+            code=scope["invite_code"],
         ),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -222,11 +226,45 @@ async def openApp(update, context):
     await update.message.reply_text(i18n.t("reelay.MiniApp.Prompt"), reply_markup=keyboard)
 
 
+async def registerCommands(bot):
+    """Publish the "/" menu Telegram shows in the compose box. Without this
+    every command is invisible unless someone reads the README, which is most
+    of why they go unused. Two scopes, because the useful set genuinely
+    differs: a DM is where you request and manage your account, a group is
+    where you claim and route."""
+    dm = [
+        BotCommand(config["entrypointAdd"], "Search for a movie or show and request it"),
+        BotCommand("app", "Open your Reelay dashboard"),
+        BotCommand("join", "Join a group with its invite code"),
+        BotCommand("linkme", "Link your Plex/Overseerr account"),
+        BotCommand("remindme", "Remind me if I don't watch something (0 = never)"),
+        BotCommand("anonymize", "Show or hide your name on group requests"),
+        BotCommand("switch", "Choose which group you're acting in"),
+        BotCommand("requestlink", "Admin: nudge members to link their Plex account"),
+        BotCommand(config["entrypointHelp"], "What Reelay can do"),
+    ]
+    group = [
+        BotCommand("claim", "Activate Reelay in this group (Telegram admins)"),
+        BotCommand("app", "Open your Reelay dashboard"),
+        BotCommand("routehere", "Post requests or updates in this topic"),
+        BotCommand("routes", "Show where each category is posted"),
+        BotCommand("unroute", "Stop posting a category here"),
+        BotCommand(config["entrypointHelp"], "What Reelay can do"),
+    ]
+    try:
+        await bot.set_my_commands(dm, scope=BotCommandScopeAllPrivateChats())
+        await bot.set_my_commands(group, scope=BotCommandScopeAllGroupChats())
+    except Exception as e:
+        # Cosmetic: a failure here costs discoverability, never functionality.
+        logger.warning(f"Could not publish the command menu: {e}")
+
+
 async def onStartup(application):
-    """post_init: launch the Mini App server, set the persistent menu button,
-    and backfill the anonymize-requests onboarding question to legacy members
-    who joined before that preference existed."""
+    """post_init: launch the Mini App server, publish the command menu, set the
+    persistent menu button, and backfill the anonymize-requests onboarding
+    question to legacy members who joined before that preference existed."""
     await miniapp.start_server(application)
+    await registerCommands(application.bot)
     await onboarding.sendAnonymizeBackfill(application.bot)
     if miniapp.enabled():
         try:
@@ -335,6 +373,7 @@ def main():
     seerr_link_handler_callback = CallbackQueryHandler(onboarding.handleSeerrLink, pattern=r"^(slink|sskip)_")
     request_link_handler_callback = CallbackQueryHandler(onboarding.handleRequestLink, pattern=r"^reqlink")
     anonymize_handler_callback = CallbackQueryHandler(onboarding.handleAnonymizeChoice, pattern=r"^anon_(yes|no)$")
+    reminder_days_handler_callback = CallbackQueryHandler(onboarding.handleReminderDaysChoice, pattern=r"^remdays_\d+$")
     # Low group number so this runs before the add/delete ConversationHandlers'
     # text handlers -- it only acts (and stops propagation) when this user has
     # an unanswered onboarding reminder-threshold question pending.
@@ -545,6 +584,7 @@ def main():
     application.add_handler(seerr_link_handler_callback)
     application.add_handler(request_link_handler_callback)
     application.add_handler(anonymize_handler_callback)
+    application.add_handler(reminder_days_handler_callback)
 
     application.add_handler(auth_handler_command)
     application.add_handler(auth_handler_text)
@@ -1373,25 +1413,67 @@ async def addSerieMovie(update, context):
 
 
 
+def _helpSections(role, in_group, scope):
+    """The /help body for this caller, as a list of sections.
+
+    Assembled rather than a single string so it never advertises something the
+    reader can't do: an ordinary member isn't shown admin commands, a group
+    isn't shown DM-only ones, and Transmission/Sabnzbd only appear when they're
+    actually switched on. A help text that lists commands you don't have is
+    worse than a shorter one."""
+    if in_group:
+        if scope is None:
+            return [i18n.t("reelay.Help.GroupUnclaimed")]
+        out = [i18n.t("reelay.Help.GroupHeader", title=scope.get("title") or "this group")]
+        if db.isFeatureEnabled(scope["chat_id"], db.FEATURE_GROUP_REQUESTS, default=False):
+            out.append(i18n.t("reelay.Help.GroupRequestsOn", add=config["entrypointAdd"]))
+        else:
+            out.append(i18n.t("reelay.Help.GroupRequestsOff"))
+        if role == "admin":
+            out.append(i18n.t("reelay.Help.Admin"))
+        return out
+
+    # Someone with no membership yet is shown /join and nothing else to do
+    # first -- requesting won't work for them until they're in a group.
+    out = [i18n.t("reelay.Help.Header")]
+    if role:
+        out.append(i18n.t("reelay.Help.Requesting", add=config["entrypointAdd"]))
+        out.append(i18n.t("reelay.Help.Account"))
+    out.append(i18n.t("reelay.Help.Groups"))
+    if role in ("editor", "admin"):
+        out.append(i18n.t(
+            "reelay.Help.Library",
+            delete=config["entrypointDelete"],
+            allSeries=config["entrypointAllSeries"],
+            allMovies=config["entrypointAllMovies"],
+        ))
+        lines = []
+        if config.get("transmission", {}).get("enable"):
+            lines.append(i18n.t("reelay.Help.TransmissionLine", transmission=config["entrypointTransmission"]))
+        if config.get("sabnzbd", {}).get("enable"):
+            lines.append(i18n.t("reelay.Help.SabnzbdLine", sabnzbd=config["entrypointSabnzbd"]))
+        if lines:
+            out.append(i18n.t("reelay.Help.Downloads", lines="\n".join(lines)))
+    if role == "admin":
+        out.append(i18n.t("reelay.Help.Admin"))
+    out.append(i18n.t("reelay.Help.Footer", help=config["entrypointHelp"]))
+    return out
+
+
 async def help(update, context):
     if config.get("enableAllowlist") and not checkAllowed(update,"regular"):
         #When using this mode, bot will remain silent if user is not in the allowlist.txt
         logger.info("Allowlist is enabled, but userID isn't added into 'allowlist.txt'. So bot stays silent")
         return ConversationHandler.END
-    
+
+    in_group = update.effective_chat.type in ("group", "supergroup")
+    scope = await resolveScope(update, context)
+    membership = db.getMembership(scope["chat_id"], update.effective_user.id) if scope else None
+    role = membership["role"] if membership and membership["status"] == "approved" else None
+
     await context.bot.send_message(
-        chat_id=update.effective_message.chat_id, text=i18n.t("reelay.Help",
-            help=config["entrypointHelp"],
-            authenticate=config["entrypointAuth"],
-            add=config["entrypointAdd"],
-            delete=config["entrypointDelete"],
-            movie=i18n.t("reelay.Movie").lower(),
-            serie=i18n.t("reelay.Series").lower(),
-            allSeries=config["entrypointAllSeries"],
-            allMovies=config["entrypointAllMovies"],
-            transmission=config["entrypointTransmission"],
-            sabnzbd=config["entrypointSabnzbd"],
-        )
+        chat_id=update.effective_message.chat_id,
+        text="\n\n".join(_helpSections(role, in_group, scope)),
     )
     return ConversationHandler.END
 
