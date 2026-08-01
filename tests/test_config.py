@@ -52,6 +52,25 @@ def test_every_optional_key_actually_exists_in_the_example():
     assert cfg.OPTIONAL_KEYS <= set(example)
 
 
+def test_theme_absent_is_fine_and_defaults_to_plain_copy(monkeypatch):
+    # theme is cosmetic and arrived late: a config.yaml written before it must
+    # neither be reported as broken nor blow up the value check.
+    monkeypatch.setattr(cfg, "config", _legacy_config(("theme",)))
+    assert cfg.checkConfig() == []
+    assert "theme" not in cfg.checkConfigValues()
+
+
+def test_unknown_theme_is_reported_like_an_unknown_language(monkeypatch):
+    monkeypatch.setitem(cfg.config, "theme", "dogs")
+    assert cfg.checkConfigValues() == ["theme"]
+
+
+def test_shipped_themes_are_accepted(monkeypatch):
+    for theme in ("default", "cat", "Cat "):
+        monkeypatch.setitem(cfg.config, "theme", theme)
+        assert cfg.checkConfigValues() == []
+
+
 def test_admin_ids_come_from_config_admin_file_and_scope_admins(tmp_path, monkeypatch):
     monkeypatch.setitem(cfg.config, "adminNotifyId", 111)
 

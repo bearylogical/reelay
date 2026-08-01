@@ -233,23 +233,23 @@ async def registerCommands(bot):
     differs: a DM is where you request and manage your account, a group is
     where you claim and route."""
     dm = [
-        BotCommand(config["entrypointAdd"], "Search for a movie or show and request it"),
-        BotCommand("app", "Open your Reelay dashboard"),
-        BotCommand("join", "Join a group with its invite code"),
-        BotCommand("linkme", "Link your Plex/Overseerr account"),
-        BotCommand("remindme", "Remind me if I don't watch something (0 = never)"),
-        BotCommand("anonymize", "Show or hide your name on group requests"),
-        BotCommand("switch", "Choose which group you're acting in"),
-        BotCommand("requestlink", "Admin: nudge members to link their Plex account"),
-        BotCommand(config["entrypointHelp"], "What Reelay can do"),
+        BotCommand(config["entrypointAdd"], i18n.t("reelay.Commands.Add")),
+        BotCommand("app", i18n.t("reelay.Commands.App")),
+        BotCommand("join", i18n.t("reelay.Commands.Join")),
+        BotCommand("linkme", i18n.t("reelay.Commands.Linkme")),
+        BotCommand("remindme", i18n.t("reelay.Commands.Remindme")),
+        BotCommand("anonymize", i18n.t("reelay.Commands.Anonymize")),
+        BotCommand("switch", i18n.t("reelay.Commands.Switch")),
+        BotCommand("requestlink", i18n.t("reelay.Commands.Requestlink")),
+        BotCommand(config["entrypointHelp"], i18n.t("reelay.Commands.Help")),
     ]
     group = [
-        BotCommand("claim", "Activate Reelay in this group (Telegram admins)"),
-        BotCommand("app", "Open your Reelay dashboard"),
-        BotCommand("routehere", "Post requests or updates in this topic"),
-        BotCommand("routes", "Show where each category is posted"),
-        BotCommand("unroute", "Stop posting a category here"),
-        BotCommand(config["entrypointHelp"], "What Reelay can do"),
+        BotCommand("claim", i18n.t("reelay.Commands.Claim")),
+        BotCommand("app", i18n.t("reelay.Commands.App")),
+        BotCommand("routehere", i18n.t("reelay.Commands.Routehere")),
+        BotCommand("routes", i18n.t("reelay.Commands.Routes")),
+        BotCommand("unroute", i18n.t("reelay.Commands.Unroute")),
+        BotCommand(config["entrypointHelp"], i18n.t("reelay.Commands.Help")),
     ]
     try:
         await bot.set_my_commands(dm, scope=BotCommandScopeAllPrivateChats())

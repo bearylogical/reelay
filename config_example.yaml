@@ -133,6 +133,17 @@ weeklyDigest:
 ## Language
 language: en-us # de-de, en-us, es-es, fr-fr, it-it, nl-be, pl-pl, pt-pt, ru-ru
 
+## Personality
+# How the bot words things. "default" is plain and neutral; "cat" gives it a
+# cat's voice (it meows at you when a film lands, naps when it's done, and
+# drags in the weekly roundup), with the lines you see often written several
+# ways and picked at random so it doesn't repeat itself. Purely cosmetic -- no
+# command, button or behaviour changes, and every instruction still says the
+# same thing.
+# Themes are overlays on English copy: with another language set, only the
+# strings that fall back to English are themed.
+theme: default # default or cat
+
 ## Entrypoints
 entrypointAuth: auth # auth or a custom entrypoint
 entrypointHelp: help # help entrypoint

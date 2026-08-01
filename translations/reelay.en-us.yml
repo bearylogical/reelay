@@ -59,6 +59,22 @@ en-us:
     GroupRequestsOff: "Requests happen in a DM with me: tap my name, then /join with this group's invite code. (An admin can turn on requests in the group from /app → Members.)"
     GroupRequestsOn: "/%{add} — request something right here. /app opens your dashboard."
     Footer: "/%{help} shows this again."
+  # One-line descriptions for the "/" menu Telegram shows in the compose box.
+  # Telegram truncates these hard, so keep them short.
+  Commands:
+    Add: Search for a movie or show and request it
+    App: Open your Reelay dashboard
+    Join: Join a group with its invite code
+    Linkme: Link your Plex/Overseerr account
+    Remindme: "Remind me if I don't watch something (0 = never)"
+    Anonymize: Show or hide your name on group requests
+    Switch: "Choose which group you're acting in"
+    Requestlink: "Admin: nudge members to link their Plex account"
+    Help: What Reelay can do
+    Claim: Activate Reelay in this group (Telegram admins)
+    Routehere: Post requests or updates in this topic
+    Routes: Show where each category is posted
+    Unroute: Stop posting a category here
   Missing config: "You are missing the following configkeys in your config.yaml-file: %{missingKeys}.
     \nAdd these before restarting the bot, or run `make config-migrate` to add them automatically."
   Wrong values: "The following configkeys has a wrong value in your config.yaml-file: %{wrongValues}.
