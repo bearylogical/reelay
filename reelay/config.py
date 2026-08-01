@@ -8,6 +8,7 @@ from .definitions import (
     CONFIG_EXAMPLE_PATH,
     DEFAULT_SETTINGS,
     OPTIONAL_KEYS,
+    THEMES,
     flatten_dict,
 )
 
@@ -43,4 +44,6 @@ def checkConfigValues():
     languages = ["de-de", "en-us", "es-es", "fr-fr", "it-it", "nl-be", "pl-pl", "pt-pt", "ru-ru"]
     if config["language"] not in languages:
         wrongValues.append("language")
+    if str(config.get("theme", "default")).strip().lower() not in THEMES:
+        wrongValues.append("theme")
     return wrongValues

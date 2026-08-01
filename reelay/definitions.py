@@ -9,6 +9,9 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.normpath(__file__)))
 CONFIG_PATH = os.path.join(ROOT_DIR, "config.yaml")
 CONFIG_EXAMPLE_PATH = os.path.join(ROOT_DIR, "config_example.yaml")
 LANG_PATH = os.path.join(ROOT_DIR, "translations/")
+# Personality themes: an overlay of the same translation keys, loaded on top of
+# the neutral copy in LANG_PATH. See translations.py and translations/themes/.
+THEMES_PATH = os.path.join(ROOT_DIR, "translations", "themes")
 CHATID_PATH = os.path.join(ROOT_DIR, "chatid.txt")
 LOG_PATH = os.path.join(ROOT_DIR, "logs", "reelay.log")
 ADMIN_PATH = os.path.join(ROOT_DIR, "admin.txt")
@@ -27,6 +30,7 @@ DEFAULT_SETTINGS = {
     "logToConsole": True,
     "debugLogging": False,
     "language": "en-us",
+    "theme": "default",
     "transmission": { "enable": False },
     "enableAdmin": False,
     "overseerr": { "enable": False, "url": "", "apikey": "", "webhookSecret": "" },
@@ -54,4 +58,9 @@ OPTIONAL_KEYS = {
     "overseerr/webhookSecret",
     "radarr/webhookSecret",
     "sonarr/webhookSecret",
+    "theme",
 }
+
+# Personality themes that ship with the bot. "default" is the plain wording;
+# anything else names a directory under THEMES_PATH holding the overlay.
+THEMES = ("default", "cat")

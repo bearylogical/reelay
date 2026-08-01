@@ -1,0 +1,202 @@
+# Cat theme -- switched on with `theme: cat` in config.yaml.
+#
+# An overlay, not a translation: it only lists the keys whose wording changes,
+# and anything left out keeps the neutral copy from translations/reelay.en-us.yml.
+#
+# A list of lines instead of one line means "pick one at random" (see
+# reelay/translations.py). Worth it for anything a regular reaches several times
+# a week -- a request confirmation, the weekly roundup -- and not worth it for
+# something read once, where variety just buys you more sentences to review.
+#
+# Three rules when editing:
+#   * the joke never eats the instruction -- a themed line still has to say
+#     what happened and what the human does next, in the same sentence;
+#   * placeholders (%{title}, %{count}, ...) and command names must survive
+#     verbatim in *every* variant, not just the first;
+#   * variants of one key have to be interchangeable: same facts, same tone,
+#     nothing that only reads correctly the first time.
+# tests/test_prompts.py enforces the first two against the base file.
+#
+# Deliberately left plain: config errors, the admin notification feed, and the
+# Transmission/Sabnzbd controls. Nobody wants a pun in the middle of a failure
+# they're being paged about.
+en-us:
+  End:
+    - "That's a wrap — I'm off for a nap. 😽"
+    - "Done. I'll be in the sunbeam if you need me. 🐈"
+    - "Finished. Curling up on the warm bit of the server now."
+  Chatid added: "✅ An admin let me in — Reelay works in this chat now. \nIf you were part-way through a command, send it again."
+  NotAdmin:
+    - "That command belongs to the cats who own the place. Ask an admin of your group to run it."
+    - "Above my pay grade, and yours. Ask an admin of your group to run it."
+  Chatid already allowed:
+    - "I already have the run of this chat — go ahead."
+    - "Already sat in this window. Go ahead."
+  Help:
+    Header:
+      - "🐱 Reelay — I hunt down movies and shows for the group, then meow when they're ready."
+      - "🐱 Reelay here. I catch the movies and shows this group asks for, and yell when one lands."
+      - "🐱 Reelay — point me at a film or show and I'll drag it home, then tell you when it's ready."
+    Requesting: "Hunting
+      \n/%{add} — search for something and request it
+      \n/app — dashboard: your requests, search, downloads, account"
+    Account: "Your basket
+      \n/linkme — link your Plex/Overseerr account so requests are yours
+      \n/remindme <days> — paw at me if I don't watch something (0 = never)
+      \n/anonymize on|off — hide or show your name on group request posts"
+    Groups: "Your colonies
+      \n/join <code> — join a group using its invite code
+      \n/switch — choose which group you're acting in"
+    Library: "The library
+      \n/%{delete} — remove a movie or show
+      \n/%{allSeries} — what Sonarr already has
+      \n/%{allMovies} — what Radarr already has"
+    Admin: "Top cat
+      \n/requestlink — nudge members who haven't linked a Plex account
+      \n/routehere requests|updates — post that category in this topic
+      \n/routes · /unroute <category> — see or clear routing
+      \nMembers, roles, the invite code and the digest schedule live in /app → Members."
+    GroupHeader:
+      - "🐱 Reelay, curled up here in %{title}."
+      - "🐱 Reelay, in residence at %{title}."
+    GroupUnclaimed: "Nobody's adopted me in this group yet — a Telegram admin sends /claim here to do that."
+    Footer:
+      - "/%{help} and I'll say all that again."
+      - "/%{help} if you want that list again."
+  NotYourRequest:
+    - "Paws off — those buttons belong to someone else's request 🙂 Send /%{add} to start your own."
+    - "Not your basket 🙂 Those buttons are someone else's request — send /%{add} to start your own."
+
+  Commands:
+    Add: Hunt down a movie or show and request it
+    App: Open your Reelay dashboard
+    Join: Join a group with its invite code
+    Linkme: Link your Plex/Overseerr account
+    Remindme: "Paw at me if I don't watch something (0 = never)"
+    Anonymize: Show or hide your name on group requests
+    Switch: "Choose which group you're acting in"
+    Requestlink: "Admin: nudge members to link their Plex account"
+    Help: What this cat can do
+    Claim: Adopt Reelay in this group (Telegram admins)
+    Routehere: Post requests or updates in this topic
+    Routes: Show where each category is posted
+    Unroute: Stop posting a category here
+
+  ChatAccess:
+    Requested: "I'm not allowed in this chat yet. I've asked the admins to let me in — I'll meow here the moment one does, and then you can run your command again."
+    StillPending:
+      - "Your request is already with the admins; nothing to do now but nap. I'll meow here when it's decided."
+      - "The admins have it already — no use scratching at the door twice. I'll meow here when it's decided."
+    AdminNotify: "🔐 %{name} (chat %{chat_id}) is scratching at the door. Let them in or turn them away in /app → Members."
+    Denied: "An admin turned down this chat's access request. If that's a surprise, ask them directly."
+    Revoked: "An admin has shooed me out of this chat."
+
+  GroupMode:
+    Activated: "✅ %{name} is now a Reelay admin for this group, and I've picked my spot on the sofa.
+      \n\nInvite code: %{code}
+      \nShare it — members DM me `/join %{code}` to get in.
+      \n\nNext: /app opens your dashboard, where you approve members and set everything else up."
+    NeedsClaim: "👋 I'm in, but I don't know who feeds me yet — whoever added me isn't a Telegram admin here.
+      \nAny Telegram admin of this group: send /claim in this chat to adopt me."
+    ClaimNotAdmin: "Only a Telegram admin of this group can adopt me here. Ask one of them to send /claim."
+    WelcomeNewMember: "👋 %{name}, I'm this group's cat — I fetch movies and TV.
+      \nDM me [here](%{link}) and send `/join %{code}` to get started."
+    OnlyOneScope: "You're only in one group (%{title}), so there's nowhere else to wander off to."
+    SwitchedTo:
+      - "Padded over to %{title}. Requests you make now go to that group."
+      - "Moved to a new windowsill: %{title}. Requests you make now go to that group."
+    SwitchedToDefault: "You're in more than one group, so I've curled up in %{title} for now. Use /switch to change it."
+
+  Onboarding:
+    JoinPending:
+      - "Thanks! Your request to join %{title} is with the admins now — I'll meow the moment it's approved."
+      - "Got it. The admins of %{title} have your request — I'll meow the moment one approves it."
+    JoinApproved: "You're in %{title}! 🎉
+      \nTwo quick questions next, then /app opens your dashboard."
+    RequestGone:
+      - "That request is gone — someone may have batted it off the table already."
+      - "Nothing there any more — someone else probably dealt with it first."
+    AskReminderDays: "1 of 2 — if you request something and never get round to watching it, should I paw at you about it?
+      \n(I won't pester you about anything you've already watched.)"
+    ReminderDisabled: "Got it, no pawing. Change your mind any time with /remindme <days>."
+    ReminderSet: "Got it — if something you requested is still unwatched after %{days} day(s), I'll sit on your keyboard about it. Change it with /remindme <days>."
+    ReminderNudge:
+      - "🐾 %{title} has been sitting there a while and you asked for it — still planning to watch?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 Still not watched %{title}, and you're the one who wanted it. Shall I keep it warm?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 %{title} is going cold on the shelf — you did ask for it. Still up for it?
+        \n(/remindme 0 turns these off.)"
+    RequestLinkPrompt: "These members of %{title} haven't linked a Plex/Overseerr account yet, so their requests aren't attributed to them. Who should I paw at?"
+    RequestLinkNoneUnlinked:
+      - "Everyone in %{title} has their Plex account linked. Purrfect. 😻"
+      - "Not one unlinked account in %{title}. Nothing for me to do but nap. 😻"
+    LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account.
+      \nIt takes one tap and means your requests show up as yours — and that I won't yowl at you about something you've already watched."
+    AnonSetHidden: "Got it, your requests will be posted anonymously — quiet paws. Change it any time with /anonymize off."
+
+  messages:
+    AddFailed:
+      - "Hairball. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "That one wriggled off. Couldn't add %{subjectWithArticle} — maybe give it another try."
+    DeleteFailed:
+      - "Hairball. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "It clung on. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+    AddSuccess:
+      - "%{subjectWithArticle} is in the basket 😺"
+      - "%{subjectWithArticle} has been dragged in and dropped at your feet 🐾"
+      - "%{subjectWithArticle} is caught and added 😸"
+      - "%{subjectWithArticle} is on the pile. Consider it hunted 😺"
+    DeleteSuccess:
+      - "%{subjectWithArticle} has been batted off the shelf 🐾"
+      - "%{subjectWithArticle} is gone — knocked clean off the table 🐾"
+      - "%{subjectWithArticle} has been buried in the litter 😼"
+    Exist:
+      - "%{subjectWithArticle} is already curled up in the library 😉"
+      - "%{subjectWithArticle} is already here — I sat on it earlier 😉"
+      - "Already caught that one: %{subjectWithArticle} is in the library 😉"
+
+  searchresults:
+    zero:
+      - Nothing caught
+      - Nothing in the bushes
+      - Came back empty-pawed
+    one: One search result
+    other: "%{count} search results"
+
+  Overseerr:
+    Requested:
+      - "✅ Requested %{title} — I'll meow when it's ready to watch. Track it any time in /app."
+      - "✅ On the hunt for %{title}. I'll meow when it's ready to watch; /app tracks it in the meantime."
+      - "✅ %{title} is on my list. Expect a meow when it's watchable — or check /app whenever you like."
+    RequestFailed:
+      - "🙀 Overseerr wouldn't take the request for %{title} just now. Worth another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Overseerr swiped at me over %{title} and refused it. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+    NotLinked: "Before you can request, I need to know which Plex/Overseerr account is yours — otherwise the request has nobody's name on it.
+      \nSend /linkme, or do it yourself in /app → Account, then try again."
+
+  Digest:
+    GroupHeader:
+      - "🐈 Look what I dragged in this week (%{count}):"
+      - "🐈 This week's haul, left on the doormat for you (%{count}):"
+      - "🐈 Caught these for you this week (%{count}):"
+    AddedHeader:
+      - "🆕 Still hunting, on its way (%{count}):"
+      - "🆕 Stalking these — not home yet (%{count}):"
+    PersonalHeader:
+      - "✅ Ready for you this week (%{count}):"
+      - "✅ Yours, and watchable now (%{count}):"
+
+  MiniApp:
+    Prompt: "Your dashboard: requests, search, downloads and your account, all in one tidy litter of tabs."
+    Open: "🐱 Open Reelay"
+
+  Channels:
+    NoScope: "Nobody's adopted me in this group yet."
+    RequestAnnounce:
+      - "🐾 %{name} requested *%{title}*"
+      - "🐾 %{name} has sent me after *%{title}*"
+      - "🐾 On the hunt for *%{title}*, for %{name}"
+    RequestAnnounceAnon:
+      - "🐾 Someone requested *%{title}*"
+      - "🐾 Someone has sent me after *%{title}*"

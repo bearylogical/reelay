@@ -104,6 +104,38 @@ Minimum config is a Telegram bot token (`telegram.token`) and your Sonarr/Radarr
 details. Overseerr, the Mini App, reminders, and the weekly digest are each
 opt-in blocks in `config.yaml`.
 
+### Personality (optional)
+
+`theme` in `config.yaml` picks how the bot words things. `default` is the plain
+wording. `cat` gives it a cat's voice — it meows when a film lands, drags in the
+weekly roundup, and naps when a command finishes:
+
+```yaml
+theme: cat   # default or cat
+```
+
+It's cosmetic only: no command, button, or behaviour changes, every instruction
+still names the same commands, and error and config messages stay plain. Restart
+to apply.
+
+The lines a regular sees often — request confirmations, the weekly roundup, group
+announcements — have several wordings and pick one at random each time, never the
+one that key used last, so the bot doesn't recite the same sentence every day:
+
+> ✅ Requested Dune — I'll meow when it's ready to watch. Track it any time in /app.
+> ✅ On the hunt for Brazil. I'll meow when it's ready to watch; /app tracks it in the meantime.
+
+Themes are overlays on the English copy in `translations/themes/<theme>/`, listing
+only the strings they reword — anything they leave out keeps the neutral version.
+A YAML list instead of a single string is what makes a key varied, and any
+translation file can use one. Adding a theme is a new directory plus `THEMES` in
+`reelay/definitions.py`; with a non-English `language` set, only the strings that
+fall back to English are themed.
+
+Tests hold the copy to its job: every variant of a string has to keep the
+placeholders (`%{title}`) and command names (`/linkme`) of the plain wording it
+replaces, so no rewording can turn an instruction into just a joke.
+
 ### Keeping config.yaml current
 
 `config_example.yaml` is the schema of record, and new releases add keys to it.
