@@ -7,6 +7,8 @@
 # reelay/translations.py). Worth it for anything a regular reaches several times
 # a week -- a request confirmation, the weekly roundup -- and not worth it for
 # something read once, where variety just buys you more sentences to review.
+# The varied keys here run to ten lines each, which is roughly where a bot you
+# talk to daily stops sounding like it only knows one joke.
 #
 # Three rules when editing:
 #   * the joke never eats the instruction -- a themed line still has to say
@@ -25,18 +27,48 @@ en-us:
     - "That's a wrap — I'm off for a nap. 😽"
     - "Done. I'll be in the sunbeam if you need me. 🐈"
     - "Finished. Curling up on the warm bit of the server now."
+    - "All done. Back to staring at a wall for no reason. 😽"
+    - "That's me finished — waking me is at your own risk. 🐈"
+    - "Done here. Off to sit in a box that's slightly too small."
+    - "Wrapped up. I'll be loafing on the radiator. 😽"
+    - "Finished — back to my eighteen hours of doing nothing. 🐈"
+    - "That's the lot. Off to knead a blanket about it."
+    - "Done and dusted. I'll be under the bed if anyone asks."
   Chatid added: "✅ An admin let me in — Reelay works in this chat now. \nIf you were part-way through a command, send it again."
   NotAdmin:
     - "That command belongs to the cats who own the place. Ask an admin of your group to run it."
     - "Above my pay grade, and yours. Ask an admin of your group to run it."
+    - "That one's kept on the high shelf. Ask an admin of your group to run it."
+    - "Only the cats with keys run that one. Ask an admin of your group to run it."
+    - "You'd need the collar with the tag on it for that. Ask an admin of your group to run it."
+    - "Locked cupboard, and I've tried. Ask an admin of your group to run it."
+    - "That's a house-cat privilege, not a stray's. Ask an admin of your group to run it."
+    - "Behind a door neither of us can open. Ask an admin of your group to run it."
+    - "That one needs a bigger paw than mine. Ask an admin of your group to run it."
+    - "Not on your side of the cat flap. Ask an admin of your group to run it."
   Chatid already allowed:
     - "I already have the run of this chat — go ahead."
     - "Already sat in this window. Go ahead."
+    - "This windowsill has been mine for a while — go ahead."
+    - "In already, and comfortable. Go ahead."
+    - "No door to scratch at here, I'm in. Go ahead."
+    - "I've had access to this chat since before you asked. Go ahead."
+    - "Already curled up here — nothing to approve. Go ahead."
+    - "This one's long since mine. Go ahead."
+    - "The cat flap's been open here for ages. Go ahead."
+    - "You're pushing at an open door — I'm already in. Go ahead."
   Help:
     Header:
       - "🐱 Reelay — I hunt down movies and shows for the group, then meow when they're ready."
       - "🐱 Reelay here. I catch the movies and shows this group asks for, and yell when one lands."
       - "🐱 Reelay — point me at a film or show and I'll drag it home, then tell you when it's ready."
+      - "🐱 Reelay. Movies and shows for the group: I go and get them, then wake you when they're ready."
+      - "🐱 Reelay — the group's resident hunter of films and TV. I'll meow when one's ready to watch."
+      - "🐱 Reelay, at your service. Name a film or show, I'll fetch it and announce it when it's ready."
+      - "🐱 Reelay — I chase down the group's films and shows, and meow the moment one's watchable."
+      - "🐱 Reelay. Ask for a movie or a series, I'll hunt it, and you'll hear from me when it's ready."
+      - "🐱 Reelay — this group's films and TV are my business. I'll let you know when one's ready."
+      - "🐱 Reelay reporting. Tell me what to watch for, and I'll meow when it's ready to watch."
     Requesting: "Hunting
       \n/%{add} — search for something and request it
       \n/app — dashboard: your requests, search, downloads, account"
@@ -59,13 +91,37 @@ en-us:
     GroupHeader:
       - "🐱 Reelay, curled up here in %{title}."
       - "🐱 Reelay, in residence at %{title}."
+      - "🐱 Reelay, on the good chair in %{title}."
+      - "🐱 Reelay, keeping the sofa warm in %{title}."
+      - "🐱 Reelay, very much at home in %{title}."
+      - "🐱 Reelay, holding the best spot in %{title}."
+      - "🐱 Reelay, moulting quietly in %{title}."
+      - "🐱 Reelay, resident cat of %{title}."
+      - "🐱 Reelay, sat in the middle of %{title}."
+      - "🐱 Reelay, on duty in %{title}."
     GroupUnclaimed: "Nobody's adopted me in this group yet — a Telegram admin sends /claim here to do that."
     Footer:
       - "/%{help} and I'll say all that again."
       - "/%{help} if you want that list again."
+      - "/%{help} brings the whole list back."
+      - "Lost track? /%{help} repeats all of it."
+      - "/%{help} whenever you want it read out again."
+      - "/%{help} and I'll go through it once more."
+      - "Forget any of that? /%{help}."
+      - "/%{help} puts the list back in front of you."
+      - "/%{help} — I never tire of repeating myself."
+      - "Say /%{help} and you get the lot again."
   NotYourRequest:
     - "Paws off — those buttons belong to someone else's request 🙂 Send /%{add} to start your own."
     - "Not your basket 🙂 Those buttons are someone else's request — send /%{add} to start your own."
+    - "Someone else called dibs on those buttons 🙂 Send /%{add} to start your own request."
+    - "That's another cat's kill 🙂 Those buttons aren't yours — send /%{add} to start your own."
+    - "Hands off the toy 🙂 Those buttons belong to someone else's request; send /%{add} for your own."
+    - "Wrong lap 🙂 That request is someone else's — send /%{add} to start your own."
+    - "Those buttons are spoken for 🙂 Send /%{add} and you'll have your own to press."
+    - "Not yours to bat at 🙂 That's someone else's request — /%{add} starts yours."
+    - "Someone got there first 🙂 That request isn't yours; send /%{add} to make one."
+    - "Off the counter 🙂 Those buttons belong to another request — send /%{add} for your own."
 
   Commands:
     Add: Hunt down a movie or show and request it
@@ -87,6 +143,14 @@ en-us:
     StillPending:
       - "Your request is already with the admins; nothing to do now but nap. I'll meow here when it's decided."
       - "The admins have it already — no use scratching at the door twice. I'll meow here when it's decided."
+      - "Already sent, already waiting. The admins have it, and I'll meow here when it's decided."
+      - "It's in their lap, not mine. I'll meow here when the admins decide."
+      - "One request is plenty — the admins have yours. I'll meow here when it's decided."
+      - "Still pending. Asking twice hurries neither a cat nor an admin; I'll meow here when it's decided."
+      - "The admins are sitting on it. I'll meow here the moment they decide."
+      - "Sent and waiting. Nothing else to do; I'll meow here when the admins decide."
+      - "Your request hasn't gone anywhere — the admins still have it. I'll meow here when it's decided."
+      - "Patience: it's with the admins. I'll meow here when it's decided."
     AdminNotify: "🔐 %{name} (chat %{chat_id}) is scratching at the door. Let them in or turn them away in /app → Members."
     Denied: "An admin turned down this chat's access request. If that's a surprise, ask them directly."
     Revoked: "An admin has shooed me out of this chat."
@@ -105,17 +169,41 @@ en-us:
     SwitchedTo:
       - "Padded over to %{title}. Requests you make now go to that group."
       - "Moved to a new windowsill: %{title}. Requests you make now go to that group."
+      - "Settled in %{title}. Requests you make now go to that group."
+      - "Wandered off to %{title}. Requests you make now go to that group."
+      - "New spot: %{title}. Requests you make now go to that group."
+      - "Relocated to %{title}. Requests you make now go to that group."
+      - "Jumped across to %{title}. Requests you make now go to that group."
+      - "I'm in %{title} now. Requests you make now go to that group."
+      - "Sofa changed — %{title} it is. Requests you make now go to that group."
+      - "Off to %{title}, tail up. Requests you make now go to that group."
     SwitchedToDefault: "You're in more than one group, so I've curled up in %{title} for now. Use /switch to change it."
 
   Onboarding:
     JoinPending:
       - "Thanks! Your request to join %{title} is with the admins now — I'll meow the moment it's approved."
       - "Got it. The admins of %{title} have your request — I'll meow the moment one approves it."
+      - "Sent. %{title}'s admins are looking at it — I'll meow the moment it's approved."
+      - "That's with the admins of %{title} now. Nothing to do but wait; I'll meow when it's approved."
+      - "Noted and passed on. The admins of %{title} decide next — I'll meow the moment it's approved."
+      - "Carried over to the admins of %{title}. I'll meow the moment one approves it."
+      - "Done — your request to join %{title} is waiting on an admin. I'll meow the moment it's approved."
+      - "Dropped at the admins' feet: your request to join %{title}. I'll meow the moment it's approved."
+      - "In the queue for %{title}'s admins now. I'll meow the moment it's approved."
+      - "Your name's in for %{title}. The admins decide; I'll meow the moment it's approved."
     JoinApproved: "You're in %{title}! 🎉
       \nTwo quick questions next, then /app opens your dashboard."
     RequestGone:
       - "That request is gone — someone may have batted it off the table already."
       - "Nothing there any more — someone else probably dealt with it first."
+      - "That one's vanished under the sofa. Someone else likely handled it first."
+      - "Empty paws — that request isn't there any more, someone got to it first."
+      - "Gone. Knocked off the counter by someone else before you got here."
+      - "Not there — someone else swiped it away first."
+      - "That request has already been dealt with by someone else."
+      - "Nothing left to pounce on: someone handled that one already."
+      - "Too slow — that request is gone, someone else got there first."
+      - "That one's been cleared away already, probably by another admin."
     AskReminderDays: "1 of 2 — if you request something and never get round to watching it, should I paw at you about it?
       \n(I won't pester you about anything you've already watched.)"
     ReminderDisabled: "Got it, no pawing. Change your mind any time with /remindme <days>."
@@ -127,10 +215,32 @@ en-us:
         \n(/remindme 0 turns these off.)"
       - "🐾 %{title} is going cold on the shelf — you did ask for it. Still up for it?
         \n(/remindme 0 turns these off.)"
+      - "🐾 I dragged %{title} in for you and it's been sitting untouched. Still planning to watch?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 %{title} has been waiting patiently, which is more than I'd manage. Still up for it?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 Sitting on your keyboard about %{title} — you asked for it, it's still unwatched. Still planning to?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 %{title} has been ready a while now and nobody's touched it. Still planning to watch?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 Nudging you about %{title}: you asked, I fetched, it's still unwatched. Still up for it?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 %{title} is gathering fur on the shelf. You did ask for it — still planning to watch?
+        \n(/remindme 0 turns these off.)"
+      - "🐾 Just so you know, %{title} is still waiting where I left it. Still up for it?
+        \n(/remindme 0 turns these off.)"
     RequestLinkPrompt: "These members of %{title} haven't linked a Plex/Overseerr account yet, so their requests aren't attributed to them. Who should I paw at?"
     RequestLinkNoneUnlinked:
       - "Everyone in %{title} has their Plex account linked. Purrfect. 😻"
       - "Not one unlinked account in %{title}. Nothing for me to do but nap. 😻"
+      - "All of %{title} is linked up already. Back to the sunbeam. 😻"
+      - "Nobody left to paw at — every account in %{title} is linked. 😻"
+      - "Every last member of %{title} is linked. A rare and beautiful thing. 😻"
+      - "%{title} is fully linked. I shall celebrate by lying down. 😻"
+      - "No stragglers in %{title} — everyone's Plex account is linked. 😻"
+      - "Clean sheet: everyone in %{title} has linked their Plex account. 😻"
+      - "Not a single unlinked paw in %{title}. 😻"
+      - "All linked in %{title}. Nothing here needs nagging. 😻"
     LinkNudge: "🔔 An admin in %{title} asked you to link your Plex/Overseerr account.
       \nIt takes one tap and means your requests show up as yours — and that I won't yowl at you about something you've already watched."
     AnonSetHidden: "Got it, your requests will be posted anonymously — quiet paws. Change it any time with /anonymize off."
@@ -139,28 +249,71 @@ en-us:
     AddFailed:
       - "Hairball. Couldn't add %{subjectWithArticle} — maybe give it another try."
       - "That one wriggled off. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Missed it by a whisker. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Fumbled that pounce. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "It got away under the fence. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Slipped my claws. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Landed badly on that one. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Bad hunt. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "It bolted. Couldn't add %{subjectWithArticle} — maybe give it another try."
+      - "Whiffed the jump. Couldn't add %{subjectWithArticle} — maybe give it another try."
     DeleteFailed:
       - "Hairball. Couldn't delete %{subjectWithArticle} — maybe give it another try."
       - "It clung on. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "Claws out, still stuck. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "Wouldn't budge off the shelf. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "That one dug in. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "No amount of swiping worked. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "It stayed put. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "Stuck fast, like a claw in a jumper. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "Pushed, and it didn't fall. Couldn't delete %{subjectWithArticle} — maybe give it another try."
+      - "That one refused to move. Couldn't delete %{subjectWithArticle} — maybe give it another try."
     AddSuccess:
       - "%{subjectWithArticle} is in the basket 😺"
       - "%{subjectWithArticle} has been dragged in and dropped at your feet 🐾"
       - "%{subjectWithArticle} is caught and added 😸"
       - "%{subjectWithArticle} is on the pile. Consider it hunted 😺"
+      - "Pounced: %{subjectWithArticle} is added 😸"
+      - "%{subjectWithArticle} is in. I'll take payment in chin scratches 😺"
+      - "Got it — %{subjectWithArticle} is on the doormat where you'll see it 🐾"
+      - "%{subjectWithArticle} is added. One for the collection 😸"
+      - "Caught, carried, added: %{subjectWithArticle} 🐾"
+      - "%{subjectWithArticle} is added, and yes, I'm pleased with myself 😺"
     DeleteSuccess:
       - "%{subjectWithArticle} has been batted off the shelf 🐾"
       - "%{subjectWithArticle} is gone — knocked clean off the table 🐾"
       - "%{subjectWithArticle} has been buried in the litter 😼"
+      - "%{subjectWithArticle} is gone. One swipe, no regrets 😼"
+      - "%{subjectWithArticle} has been shoved off the edge and deleted 🐾"
+      - "%{subjectWithArticle} is out — dragged off and dealt with 😼"
+      - "%{subjectWithArticle} has been removed, with a certain amount of glee 😼"
+      - "Swiped: %{subjectWithArticle} is deleted 🐾"
+      - "%{subjectWithArticle} is off the shelf and out of the library 🐾"
+      - "%{subjectWithArticle} has been dealt with. It won't be back 😼"
     Exist:
       - "%{subjectWithArticle} is already curled up in the library 😉"
       - "%{subjectWithArticle} is already here — I sat on it earlier 😉"
       - "Already caught that one: %{subjectWithArticle} is in the library 😉"
+      - "%{subjectWithArticle} is already on the pile. I hunted it once already 😉"
+      - "No need — %{subjectWithArticle} is already in the library, warm spot and all 😉"
+      - "Been there, caught that: %{subjectWithArticle} is already in the library 😉"
+      - "%{subjectWithArticle} is already in. Save your energy, I'll save mine 😉"
+      - "Old news — %{subjectWithArticle} has been in the library a while 😉"
+      - "%{subjectWithArticle} is already here, asleep on the good shelf 😉"
+      - "Nothing to hunt: %{subjectWithArticle} is already in the library 😉"
 
   searchresults:
     zero:
       - Nothing caught
       - Nothing in the bushes
       - Came back empty-pawed
+      - Not a whisker of it
+      - Nothing under the sofa either
+      - Hunted, found nothing
+      - No luck, no catch
+      - Nothing worth dragging back
+      - Sniffed around, found nothing
+      - Not a thing out there
     one: One search result
     other: "%{count} search results"
 
@@ -169,9 +322,24 @@ en-us:
       - "✅ Requested %{title} — I'll meow when it's ready to watch. Track it any time in /app."
       - "✅ On the hunt for %{title}. I'll meow when it's ready to watch; /app tracks it in the meantime."
       - "✅ %{title} is on my list. Expect a meow when it's watchable — or check /app whenever you like."
+      - "✅ Off after %{title} now. You'll get a meow when it's ready to watch; /app has the details."
+      - "✅ %{title} requested. I'll meow the moment it's watchable, and /app shows where it's got to."
+      - "✅ Stalking %{title} as we speak. A meow when it's ready to watch, and /app in the meantime."
+      - "✅ %{title} is requested and I'm on it. A meow when it's watchable; /app if you're impatient."
+      - "✅ Noted: %{title}. I'll meow when it's ready to watch, and /app tracks it until then."
+      - "✅ %{title} is in my sights. You'll hear a meow when it's watchable — /app has the progress."
+      - "✅ Away after %{title}. Expect a meow when it's ready to watch; check /app any time."
     RequestFailed:
       - "🙀 Overseerr wouldn't take the request for %{title} just now. Worth another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
       - "🙀 Overseerr swiped at me over %{title} and refused it. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Overseerr turned its back on %{title} and wouldn't take it. Another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 No luck with %{title} — Overseerr hissed and refused. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Overseerr wasn't having %{title} at all. Worth another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 The request for %{title} bounced straight back off Overseerr. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Overseerr sulked and dropped the request for %{title}. Another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Couldn't get %{title} past Overseerr just now. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 Overseerr batted the request for %{title} away. Worth another go in a minute; if it keeps failing, an admin can check /app → Members → Connections."
+      - "🙀 %{title} didn't make it into Overseerr. Try again in a minute; if it keeps failing, an admin can check /app → Members → Connections."
     NotLinked: "Before you can request, I need to know which Plex/Overseerr account is yours — otherwise the request has nobody's name on it.
       \nSend /linkme, or do it yourself in /app → Account, then try again."
 
@@ -180,15 +348,48 @@ en-us:
       - "🐈 Look what I dragged in this week (%{count}):"
       - "🐈 This week's haul, left on the doormat for you (%{count}):"
       - "🐈 Caught these for you this week (%{count}):"
+      - "🐈 A week's hunting, all of it yours (%{count}):"
+      - "🐈 Presented at your feet, this week's catch (%{count}):"
+      - "🐈 The week's catch, laid out for inspection (%{count}):"
+      - "🐈 Brought in this week, one at a time (%{count}):"
+      - "🐈 Everything I caught this week (%{count}):"
+      - "🐈 I hunted all week, and this came back (%{count}):"
+      - "🐈 New on the shelf after a week's hunting (%{count}):"
     AddedHeader:
       - "🆕 Still hunting, on its way (%{count}):"
       - "🆕 Stalking these — not home yet (%{count}):"
+      - "🆕 Spotted and being chased down (%{count}):"
+      - "🆕 In my sights, not caught yet (%{count}):"
+      - "🆕 On the trail of these (%{count}):"
+      - "🆕 Chasing these up, nothing landed yet (%{count}):"
+      - "🆕 Out after these right now (%{count}):"
+      - "🆕 Not on the doormat yet, but coming (%{count}):"
+      - "🆕 Being hunted as we speak (%{count}):"
+      - "🆕 Added to the hunt, still on their way (%{count}):"
     PersonalHeader:
       - "✅ Ready for you this week (%{count}):"
       - "✅ Yours, and watchable now (%{count}):"
+      - "✅ Caught for you, ready to watch (%{count}):"
+      - "✅ On your doormat and ready (%{count}):"
+      - "✅ Waiting for you, ready to watch (%{count}):"
+      - "✅ Yours this week, all watchable (%{count}):"
+      - "✅ Delivered and ready for you (%{count}):"
+      - "✅ These are yours and they're ready (%{count}):"
+      - "✅ Hunted for you, ready to watch (%{count}):"
+      - "✅ Ready when you are (%{count}):"
 
   MiniApp:
-    Prompt: "Your dashboard: requests, search, downloads and your account, all in one tidy litter of tabs."
+    Prompt:
+      - "Your dashboard: requests, search, downloads and your account, all in one tidy litter of tabs."
+      - "Everything in one place: requests, search, downloads and your account. Even I can't knock it over."
+      - "One window, all of it — requests, search, downloads and your account."
+      - "Your dashboard: requests, search, downloads and your account, stacked like a very good box."
+      - "Requests, search, downloads, your account — all in one place, no scratching about."
+      - "The whole lot in one window: requests, search, downloads and your account."
+      - "Your dashboard has the lot: requests, search, downloads and your account."
+      - "One tidy spot for requests, search, downloads and your account."
+      - "Everything you'd otherwise ask me for: requests, search, downloads and your account."
+      - "Requests, search, downloads and your account, all under one roof."
     Open: "🐱 Open Reelay"
 
   Channels:
@@ -197,6 +398,21 @@ en-us:
       - "🐾 %{name} requested *%{title}*"
       - "🐾 %{name} has sent me after *%{title}*"
       - "🐾 On the hunt for *%{title}*, for %{name}"
+      - "🐾 %{name} wants *%{title}* — off I go"
+      - "🐾 Orders from %{name}: fetch *%{title}*"
+      - "🐾 *%{title}* is being hunted down for %{name}"
+      - "🐾 %{name} pointed me at *%{title}*"
+      - "🐾 Off after *%{title}* on %{name}'s say-so"
+      - "🐾 %{name} asked for *%{title}*, so I'm going"
+      - "🐾 New hunt for %{name}: *%{title}*"
     RequestAnnounceAnon:
       - "🐾 Someone requested *%{title}*"
       - "🐾 Someone has sent me after *%{title}*"
+      - "🐾 On the hunt for *%{title}*, for someone who'd rather not say"
+      - "🐾 A quiet paw pointed me at *%{title}*"
+      - "🐾 *%{title}* is being hunted down, name withheld"
+      - "🐾 Someone wants *%{title}* — off I go"
+      - "🐾 Off after *%{title}* for a nameless someone"
+      - "🐾 An anonymous request: *%{title}*"
+      - "🐾 Someone asked for *%{title}*, and left it at that"
+      - "🐾 New hunt, no name on it: *%{title}*"

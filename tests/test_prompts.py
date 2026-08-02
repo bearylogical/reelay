@@ -212,11 +212,18 @@ def test_the_variant_layer_leaves_ordinary_strings_alone():
     assert i18n.t("reelay.NoSuchKeyAtAll") == "reelay.NoSuchKeyAtAll"
 
 
+# Draws per "every line gets used" check, per variant the key has. The counts
+# scale with the list because a fixed number of draws quietly turns into a
+# flaky test the next time someone adds three more lines to a key.
+DRAWS_PER_VARIANT = 50
+
+
 def test_a_varied_key_uses_all_its_lines_and_never_repeats_back_to_back():
     key, expected = "reelay.messages.AddSuccess", set(CAT_STRINGS["messages.AddSuccess"])
     assert len(expected) > 1, "this test needs a key with variants to be worth running"
     with _themed("cat"):
-        seen = [i18n.t(key, subjectWithArticle="The movie") for _ in range(60)]
+        seen = [i18n.t(key, subjectWithArticle="The movie")
+                for _ in range(DRAWS_PER_VARIANT * len(expected))]
     rendered = {line.replace("The movie", "%{subjectWithArticle}") for line in seen}
     assert rendered == expected                       # every line gets used
     assert all(a != b for a, b in zip(seen, seen[1:]))  # and never twice running
@@ -224,14 +231,16 @@ def test_a_varied_key_uses_all_its_lines_and_never_repeats_back_to_back():
 
 def test_every_variant_of_a_key_still_fills_in_its_placeholders():
     with _themed("cat"):
-        lines = {i18n.t("reelay.Overseerr.Requested", title="Dune") for _ in range(40)}
+        draws = DRAWS_PER_VARIANT * len(CAT_STRINGS["Overseerr.Requested"])
+        lines = {i18n.t("reelay.Overseerr.Requested", title="Dune") for _ in range(draws)}
     assert len(lines) == len(CAT_STRINGS["Overseerr.Requested"])
     assert all("Dune" in line and "%{" not in line for line in lines)
 
 
 def test_a_varied_plural_form_is_still_pluralised():
     with _themed("cat"):
-        zero = {i18n.t("reelay.searchresults", count=0) for _ in range(30)}
+        draws = DRAWS_PER_VARIANT * len(CAT_STRINGS["searchresults.zero"])
+        zero = {i18n.t("reelay.searchresults", count=0) for _ in range(draws)}
         assert zero == set(CAT_STRINGS["searchresults.zero"])
         assert i18n.t("reelay.searchresults", count=4) == "4 search results"
 
