@@ -162,6 +162,57 @@ def test_every_variant_keeps_the_commands_it_mentions(name, strings):
     assert _dropped(strings, COMMAND_RE) == {}
 
 
+# Some translation values aren't copy at all: reelay.Movie *is* the /movie
+# command and the callback data its buttons match on, so rewording it renames a
+# command and rewording it into a list of variants breaks the flow outright --
+# a button whose callback data changes every render matches no handler. Found
+# by scanning rather than listed by hand, so a new one is covered the day it's
+# written.
+# Not keyed on .lower() alone: that's also just display casing ("The movie"),
+# and every key that is genuinely a command name reaches one of these anyway.
+STRUCTURAL_USES = [
+    re.compile(r'callback_data=i18n\.t\(\s*"(reelay\.[^"]+)"'),      # button -> handler wiring
+    re.compile(r'==\s*i18n\.t\(\s*"(reelay\.[^"]+)"'),               # value compared, not shown
+]
+# ...and these ones only bind a key on the same line, so they're matched per line.
+STRUCTURAL_LINES = re.compile(r"pattern=|filters\.Regex\(|CommandHandler\(")
+ANY_KEY = re.compile(r'i18n\.t\(\s*"(reelay\.[^"]+)"')
+
+
+def _structural_keys():
+    keys = set()
+    for path in SRC.glob("*.py"):
+        text = path.read_text(encoding="utf8")
+        for pattern in STRUCTURAL_USES:
+            keys.update(pattern.findall(text))
+        for line in text.splitlines():
+            if STRUCTURAL_LINES.search(line):
+                keys.update(ANY_KEY.findall(line))
+    return {k[len("reelay."):] for k in keys}
+
+
+STRUCTURAL_KEYS = _structural_keys()
+
+
+def test_the_structural_key_scan_still_finds_the_wiring():
+    """Guards the guard: if these regexes stop matching, the two tests below
+    would pass by finding nothing at all."""
+    assert {"Movie", "Series", "Next result", "Add", "New", "Stop"} <= STRUCTURAL_KEYS
+
+
+def test_structural_keys_are_single_plain_strings():
+    varied = {k: BASE_STRINGS[k] for k in STRUCTURAL_KEYS
+              if k in BASE_STRINGS and not isinstance(BASE_STRINGS[k], str)}
+    assert varied == {}
+
+
+@pytest.mark.parametrize("name,strings", OVERLAY_STRINGS)
+def test_themes_leave_structural_keys_alone(name, strings):
+    """Theming reelay.Movie would rename /movie for everyone running the theme,
+    and the buttons of a half-finished conversation would stop matching."""
+    assert sorted(STRUCTURAL_KEYS & set(strings)) == []
+
+
 @pytest.mark.parametrize("name,strings", OVERLAY_STRINGS)
 def test_variant_lists_have_no_duplicate_lines(name, strings):
     """A line repeated inside one list is a copy-paste, and it quietly doubles
@@ -247,6 +298,40 @@ def test_variant_picking_is_seedable_so_a_caller_can_reproduce_a_message():
 
 def test_a_single_line_key_is_not_treated_as_a_choice():
     assert translations.pickVariant("solo", ["only one"]) == "only one"
+
+
+# --- /help ---------------------------------------------------------------------
+
+# --- The "/" command menu -------------------------------------------------------
+
+def _publishedMenu():
+    """What registerCommands() would send Telegram, as {scope: {command: label}}."""
+    bot_api = MagicMock()
+    bot_api.set_my_commands = AsyncMock()
+    asyncio.run(bot.registerCommands(bot_api))
+    return [{c.command: c.description for c in call.args[0]}
+            for call in bot_api.set_my_commands.call_args_list]
+
+
+def test_the_menu_offers_the_direct_movie_and_series_commands():
+    dm, group = _publishedMenu()
+    assert "movie" in dm and "series" in dm
+    assert "start" in dm                      # the ask-me-which-one entrypoint
+    assert "movie" not in group               # requesting in a group goes through /start
+
+
+def test_every_published_command_is_one_telegram_will_accept():
+    """The names come from translated words (reelay.Movie -> /movie), so a
+    locale with a space or an accent in it would have the whole menu rejected."""
+    illegal = [c for scope in _publishedMenu() for c in scope
+               if not re.fullmatch(r"[a-z0-9_]{1,32}", c)]
+    assert illegal == []
+
+
+def test_published_commands_match_the_handlers_that_serve_them():
+    """A menu entry for a command nothing answers is worse than no entry."""
+    dm, _ = _publishedMenu()
+    assert dm.keys() >= {i18n.t("reelay.Movie").lower(), i18n.t("reelay.Series").lower()}
 
 
 # --- /help ---------------------------------------------------------------------

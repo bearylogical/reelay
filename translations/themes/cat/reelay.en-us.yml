@@ -39,6 +39,7 @@ en-us:
       - "🐱 Reelay — point me at a film or show and I'll drag it home, then tell you when it's ready."
     Requesting: "Hunting
       \n/%{add} — search for something and request it
+      \n/%{movie} · /%{serie} — same hunt, but tell me the quarry up front
       \n/app — dashboard: your requests, search, downloads, account"
     Account: "Your basket
       \n/linkme — link your Plex/Overseerr account so requests are yours
@@ -69,6 +70,8 @@ en-us:
 
   Commands:
     Add: Hunt down a movie or show and request it
+    Movie: Hunt down a movie and request it
+    Series: Hunt down a series and request it
     App: Open your Reelay dashboard
     Join: Join a group with its invite code
     Linkme: Link your Plex/Overseerr account
