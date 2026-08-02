@@ -60,6 +60,9 @@ en-us:
       - "🐱 Reelay, curled up here in %{title}."
       - "🐱 Reelay, in residence at %{title}."
     GroupUnclaimed: "Nobody's adopted me in this group yet — a Telegram admin sends /claim here to do that."
+    Cat:
+      - "/cat — a picture of a cat, or a fact about one. My favourite command."
+      - "/cat — a cat picture or a cat fact, at random. No, it doesn't do anything else."
     Footer:
       - "/%{help} and I'll say all that again."
       - "/%{help} if you want that list again."
@@ -76,6 +79,7 @@ en-us:
     Anonymize: Show or hide your name on group requests
     Switch: "Choose which group you're acting in"
     Requestlink: "Admin: nudge members to link their Plex account"
+    Cat: A cat picture or a cat fact
     Help: What this cat can do
     Claim: Adopt Reelay in this group (Telegram admins)
     Routehere: Post requests or updates in this topic
@@ -186,6 +190,20 @@ en-us:
     PersonalHeader:
       - "✅ Ready for you this week (%{count}):"
       - "✅ Yours, and watchable now (%{count}):"
+
+  Cat:
+    PhotoCaption:
+      - "🐈 A colleague."
+      - "🐈 Found this one on the warm bit of the server."
+      - "🐈 Not me. A stunt double."
+      - "🐈 One cat, as ordered. Don't wake it."
+    Fact:
+      - "🐈 Something you should know about my kind: %{fact}"
+      - "🐈 From the sunbeam archives: %{fact}"
+      - "🐈 %{fact} Now you know."
+    Unavailable:
+      - "Every cat I know is asleep and neither one answered. Try /cat again in a bit."
+      - "No picture, no fact — the whole species is ignoring me. Try /cat again in a bit."
 
   MiniApp:
     Prompt: "Your dashboard: requests, search, downloads and your account, all in one tidy litter of tabs."

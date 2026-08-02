@@ -20,6 +20,7 @@ from .commons import (checkAllowed, checkId, requestChatAccess, format_bytes,
                       forgetCallbackOwner, resolveScope)
 from .conversation import (SERIE_MOVIE_AUTHENTICATED, READ_CHOICE, GIVE_OPTION, GIVE_PATHS, TSL_NORMAL, GIVE_QUALITY_PROFILES, SELECT_SEASONS, SERIE_MOVIE_DELETE, READ_DELETE_CHOICE, stop, getService, clearUserData)
 from . import db
+from . import cat
 from . import channels
 from . import digest
 from . import miniapp
@@ -241,6 +242,7 @@ async def registerCommands(bot):
         BotCommand("anonymize", i18n.t("reelay.Commands.Anonymize")),
         BotCommand("switch", i18n.t("reelay.Commands.Switch")),
         BotCommand("requestlink", i18n.t("reelay.Commands.Requestlink")),
+        BotCommand("cat", i18n.t("reelay.Commands.Cat")),
         BotCommand(config["entrypointHelp"], i18n.t("reelay.Commands.Help")),
     ]
     group = [
@@ -249,6 +251,7 @@ async def registerCommands(bot):
         BotCommand("routehere", i18n.t("reelay.Commands.Routehere")),
         BotCommand("routes", i18n.t("reelay.Commands.Routes")),
         BotCommand("unroute", i18n.t("reelay.Commands.Unroute")),
+        BotCommand("cat", i18n.t("reelay.Commands.Cat")),
         BotCommand(config["entrypointHelp"], i18n.t("reelay.Commands.Help")),
     ]
     try:
@@ -366,6 +369,7 @@ def main():
     routehere_handler_command = CommandHandler("routehere", channels.routehere)
     routes_handler_command = CommandHandler("routes", channels.routes)
     unroute_handler_command = CommandHandler("unroute", channels.unroute)
+    cat_handler_command = CommandHandler("cat", cat.cat)
     claim_handler_command = CommandHandler("claim", claimAdmin)
     switch_handler_command = CommandHandler("switch", switchScope)
     switch_handler_callback = CallbackQueryHandler(handleSwitchScope, pattern=r"^switch_scope_")
@@ -577,6 +581,7 @@ def main():
     application.add_handler(linkme_handler_command)
     application.add_handler(requestlink_handler_command)
     application.add_handler(app_handler_command)
+    application.add_handler(cat_handler_command)
     application.add_handler(routehere_handler_command)
     application.add_handler(routes_handler_command)
     application.add_handler(unroute_handler_command)
@@ -1431,6 +1436,7 @@ def _helpSections(role, in_group, scope):
             out.append(i18n.t("reelay.Help.GroupRequestsOff"))
         if role == "admin":
             out.append(i18n.t("reelay.Help.Admin"))
+        out.append(i18n.t("reelay.Help.Cat"))
         return out
 
     # Someone with no membership yet is shown /join and nothing else to do
@@ -1456,6 +1462,7 @@ def _helpSections(role, in_group, scope):
             out.append(i18n.t("reelay.Help.Downloads", lines="\n".join(lines)))
     if role == "admin":
         out.append(i18n.t("reelay.Help.Admin"))
+    out.append(i18n.t("reelay.Help.Cat"))
     out.append(i18n.t("reelay.Help.Footer", help=config["entrypointHelp"]))
     return out
 

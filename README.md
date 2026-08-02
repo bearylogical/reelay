@@ -86,6 +86,11 @@ grew into a group-native, Overseerr-first bot with its own architecture.
   `/help` itself is assembled per caller: a member isn't shown admin commands,
   a group isn't shown DM-only ones, and a download client that's switched off
   isn't advertised.
+- **`/cat`.** A random cat picture from [cataas.com](https://cataas.com) or a
+  random fact from [catfact.ninja](https://catfact.ninja), one or the other at
+  random, in a DM or a group. No key and nothing to configure; if one service
+  is down you get the other kind of cat. (It has more to say when `theme: cat`
+  is on.)
 - **Group-safe inline keyboards, `/switch` for multi-group DMs, and the original
   Sonarr/Radarr list + Transmission/Sabnzbd speed controls.**
 
@@ -289,6 +294,7 @@ run on python-telegram-bot's `JobQueue`.
 | `digest.py` | Weekly what's-new (group post + personal DMs) |
 | `webhooks.py` | Overseerr/Radarr/Sonarr webhook receivers (record library events for the digest) |
 | `diagnostics.py` | Read-only connection self-test of the Overseerr → Radarr/Sonarr chain (Members tab → Connections) |
+| `cat.py` | `/cat` — a random cat picture (cataas.com) or cat fact (catfact.ninja) |
 | `miniapp.py` | aiohttp server, initData auth; dashboard/queue/catalog/request API; admin API for members, roles, invite code, join policy, feature flags, chat-access requests, and the connection self-test; Plex linking API |
 | `miniapp_dev.py` | Dev-only: serves the Mini App in a plain browser with seeded data and faked services ([above](#working-on-the-mini-app-without-telegram)) |
 | `add.py`* / `delete.py` / `listing.py` / `transmission.py` / `sabnzbd.py` | Conversation flows |
