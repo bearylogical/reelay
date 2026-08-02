@@ -58,6 +58,7 @@ en-us:
     GroupUnclaimed: "I'm not activated in this group yet — a Telegram admin sends /claim here to do that."
     GroupRequestsOff: "Requests happen in a DM with me: tap my name, then /join with this group's invite code. (An admin can turn on requests in the group from /app → Members.)"
     GroupRequestsOn: "/%{add} — request something right here. /app opens your dashboard."
+    Cat: "/cat — a cat picture or a cat fact, at random. That's the whole feature."
     Footer: "/%{help} shows this again."
   # One-line descriptions for the "/" menu Telegram shows in the compose box.
   # Telegram truncates these hard, so keep them short.
@@ -70,6 +71,7 @@ en-us:
     Anonymize: Show or hide your name on group requests
     Switch: "Choose which group you're acting in"
     Requestlink: "Admin: nudge members to link their Plex account"
+    Cat: A random cat picture or cat fact
     Help: What Reelay can do
     Claim: Activate Reelay in this group (Telegram admins)
     Routehere: Post requests or updates in this topic
@@ -200,6 +202,13 @@ en-us:
     Prompt: "Your dashboard: requests, search, downloads and your account, all in one place."
     Open: "📱 Open Reelay"
     MenuButton: "Reelay"
+
+  # /cat. The picture comes from cataas.com and the fact from catfact.ninja, so
+  # the only copy here is what wraps them -- and what to say when both are down.
+  Cat:
+    PhotoCaption: "🐈 One cat, as ordered."
+    Fact: "🐈 %{fact}"
+    Unavailable: "No cats to be found just now — the picture and the fact are both out. Try /cat again in a bit."
 
   Channels:
     GroupOnly: "This command works inside the group (and topic) you want to route."
