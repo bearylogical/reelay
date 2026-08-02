@@ -235,6 +235,11 @@ async def registerCommands(bot):
     where you claim and route."""
     dm = [
         BotCommand(config["entrypointAdd"], i18n.t("reelay.Commands.Add")),
+        # Same flow as the entrypoint, minus the movie-or-series question. The
+        # command names *are* the translated words, matching the handlers these
+        # advertise (see the add ConversationHandler below).
+        BotCommand(i18n.t("reelay.Movie").lower(), i18n.t("reelay.Commands.Movie")),
+        BotCommand(i18n.t("reelay.Series").lower(), i18n.t("reelay.Commands.Series")),
         BotCommand("app", i18n.t("reelay.Commands.App")),
         BotCommand("join", i18n.t("reelay.Commands.Join")),
         BotCommand("linkme", i18n.t("reelay.Commands.Linkme")),
@@ -1443,7 +1448,12 @@ def _helpSections(role, in_group, scope):
     # first -- requesting won't work for them until they're in a group.
     out = [i18n.t("reelay.Help.Header")]
     if role:
-        out.append(i18n.t("reelay.Help.Requesting", add=config["entrypointAdd"]))
+        out.append(i18n.t(
+            "reelay.Help.Requesting",
+            add=config["entrypointAdd"],
+            movie=i18n.t("reelay.Movie").lower(),
+            serie=i18n.t("reelay.Series").lower(),
+        ))
         out.append(i18n.t("reelay.Help.Account"))
     out.append(i18n.t("reelay.Help.Groups"))
     if role in ("editor", "admin"):

@@ -33,6 +33,7 @@ en-us:
     Header: "🎬 Reelay — request movies and shows for the group, and I'll tell you when they're ready."
     Requesting: "Requesting
       \n/%{add} — search for something and request it
+      \n/%{movie} · /%{serie} — same thing, but say up front which one it is
       \n/app — dashboard: your requests, search, downloads, account"
     Account: "You
       \n/linkme — link your Plex/Overseerr account so requests are yours
@@ -64,6 +65,8 @@ en-us:
   # Telegram truncates these hard, so keep them short.
   Commands:
     Add: Search for a movie or show and request it
+    Movie: Search for a movie and request it
+    Series: Search for a series and request it
     App: Open your Reelay dashboard
     Join: Join a group with its invite code
     Linkme: Link your Plex/Overseerr account
